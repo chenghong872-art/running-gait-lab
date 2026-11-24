@@ -276,7 +276,8 @@
           </div>
 
           <!-- Dual-Video Side-by-Side Comparison View -->
-          <div id="dualVideoContainer" class="hidden absolute inset-0 bg-slate-950 grid grid-cols-2 gap-1 p-1 z-10">
+          <div id="dualVideoContainer" class="hidden absolute inset-0 bg-slate-950 flex flex-col gap-1 p-1 z-10">
+            <div class="flex-1 grid grid-cols-2 gap-1 min-h-0">
             <div class="relative bg-slate-900 rounded-lg overflow-hidden flex flex-col">
               <div class="px-2 py-1 bg-slate-800/90 flex items-center justify-between text-[10px] text-slate-200 z-10">
                 <span class="font-semibold">A：前測 / 調整前</span>
@@ -308,6 +309,11 @@
               <div id="dualMetricB" class="px-2 py-1 bg-slate-900/90 text-[10px] text-slate-300 mono-num border-t border-slate-800">
                 前傾 --° | 膝屈曲 --°
               </div>
+            </div>
+            </div>
+            <div class="px-2.5 py-1 bg-slate-900 rounded-md border border-slate-800 flex items-center justify-between text-[10px] text-slate-300 shrink-0">
+              <span id="dualDeltaBar" class="mono-num">對比差異 (B - A)：等待兩側影片皆偵測到骨骼...</span>
+              <button id="btnDualSyncZero" type="button" class="px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 transition">雙片同步歸零</button>
             </div>
           </div>
 
@@ -969,8 +975,35 @@
     };
 
     // DOM Elements
+    const canvasContainer = document.getElementById('canvasContainer');
+    function adaptViewportAspect(vw, vh) {
+      if (state.mode === 'dual') {
+        canvasContainer.className = 'relative w-full bg-slate-900 aspect-[4/3] sm:aspect-[16/10] flex items-center justify-center overflow-hidden';
+      } else if (vw && vh && vh > vw) {
+        // Portrait 9:16 video: expand height so runner is large & clear without huge side black bars
+        canvasContainer.className = 'relative w-full bg-slate-900 aspect-[3/4] max-h-[580px] flex items-center justify-center overflow-hidden';
+      } else {
+        canvasContainer.className = 'relative w-full bg-slate-900 aspect-[4/3] sm:aspect-[16/10] flex items-center justify-center overflow-hidden';
+      }
+      resizeCanvas();
+    }
     const canvas = document.getElementById('gaitCanvas');
     const ctx = canvas.getContext('2d');
+    // Offscreen downscaled canvas (max 384px) so MediaPipe runs 3-5x faster without slowing down video
+    const aiInputCanvas = document.createElement('canvas');
+    const aiInputCtx = aiInputCanvas.getContext('2d', { willReadFrequently: false });
+    function getFastAiInput(mediaEl, vw, vh) {
+      const maxDim = 384;
+      const scale = Math.min(1, maxDim / Math.max(vw || 384, vh || 384));
+      const tw = Math.max(64, Math.round((vw || 384) * scale));
+      const th = Math.max(64, Math.round((vh || 384) * scale));
+      if (aiInputCanvas.width !== tw || aiInputCanvas.height !== th) {
+        aiInputCanvas.width = tw;
+        aiInputCanvas.height = th;
+      }
+      aiInputCtx.drawImage(mediaEl, 0, 0, tw, th);
+      return aiInputCanvas;
+    }
     const videoEl = document.getElementById('sourceVideo');
     const cameraVideoEl = document.getElementById('cameraVideo');
     const imgEl = document.getElementById('sourceImage');
@@ -1404,18 +1437,30 @@
       ctx.restore();
     }
 
+    function isVis(pt) {
+      return pt && (pt.v === undefined || pt.v >= 0.35);
+    }
+
     function drawSideSkeleton(side, isLeft) {
       if (!side) return;
       const dashed = isLeft;
-      const alpha = isLeft ? 0.85 : 1.0;
-      if (state.visibleSegments.headNeck) drawSegment(side.head, side.shoulder, SEGMENT_COLORS.headNeck, 3.8, alpha, dashed);
-      if (state.visibleSegments.torso) drawSegment(side.shoulder, side.hip, SEGMENT_COLORS.torso, 4.2, alpha, dashed);
-      if (state.visibleSegments.arm) {
-        drawSegment(side.shoulder, side.elbow, SEGMENT_COLORS.arm, 3.8, alpha, dashed);
-        if (side.wrist) drawSegment(side.elbow, side.wrist, SEGMENT_COLORS.arm, 3.2, alpha, dashed);
+      const alpha = isLeft ? 0.82 : 1.0;
+      if (state.visibleSegments.headNeck && isVis(side.head) && isVis(side.shoulder)) {
+        drawSegment(side.head, side.shoulder, SEGMENT_COLORS.headNeck, 3.8, alpha, dashed);
       }
-      if (state.visibleSegments.thigh) drawSegment(side.hip, side.knee, SEGMENT_COLORS.thigh, 4.2, alpha, dashed);
-      if (state.visibleSegments.shin) drawSegment(side.knee, side.ankle, SEGMENT_COLORS.shin, 4.2, alpha, dashed);
+      if (state.visibleSegments.torso && isVis(side.shoulder) && isVis(side.hip)) {
+        drawSegment(side.shoulder, side.hip, SEGMENT_COLORS.torso, 4.2, alpha, dashed);
+      }
+      if (state.visibleSegments.arm && isVis(side.shoulder) && isVis(side.elbow)) {
+        drawSegment(side.shoulder, side.elbow, SEGMENT_COLORS.arm, 3.8, alpha, dashed);
+        if (isVis(side.wrist)) drawSegment(side.elbow, side.wrist, SEGMENT_COLORS.arm, 3.2, alpha, dashed);
+      }
+      if (state.visibleSegments.thigh && isVis(side.hip) && isVis(side.knee)) {
+        drawSegment(side.hip, side.knee, SEGMENT_COLORS.thigh, 4.2, alpha, dashed);
+      }
+      if (state.visibleSegments.shin && isVis(side.knee) && isVis(side.ankle)) {
+        drawSegment(side.knee, side.ankle, SEGMENT_COLORS.shin, 4.2, alpha, dashed);
+      }
     }
 
     function renderPoseAndComputeMetrics(pose, recordHistory = true) {
@@ -1453,20 +1498,22 @@
         ctx.restore();
       }
 
-      // 2. Record & Draw Left / Right Ankle Trajectories
-      if (recordHistory) {
-        if (right && right.ankle) {
-          state.ankleTrailRight.push({ x: right.ankle.x, y: right.ankle.y });
-          if (state.ankleTrailRight.length > state.maxAnkleTrail) state.ankleTrailRight.shift();
+      // 2. Record & Draw Left / Right Ankle Trajectories (disabled in frontal view)
+      if (state.viewAngle !== 'frontal') {
+        if (recordHistory) {
+          if (right && isVis(right.ankle)) {
+            state.ankleTrailRight.push({ x: right.ankle.x, y: right.ankle.y });
+            if (state.ankleTrailRight.length > state.maxAnkleTrail) state.ankleTrailRight.shift();
+          }
+          if (left && isVis(left.ankle)) {
+            state.ankleTrailLeft.push({ x: left.ankle.x, y: left.ankle.y });
+            if (state.ankleTrailLeft.length > state.maxAnkleTrail) state.ankleTrailLeft.shift();
+          }
         }
-        if (left && left.ankle) {
-          state.ankleTrailLeft.push({ x: left.ankle.x, y: left.ankle.y });
-          if (state.ankleTrailLeft.length > state.maxAnkleTrail) state.ankleTrailLeft.shift();
+        if (state.visibleSegments.ankleTrail) {
+          if (state.showLeftSide) drawTrail(state.ankleTrailLeft, true);
+          if (state.showRightSide) drawTrail(state.ankleTrailRight, false);
         }
-      }
-      if (state.visibleSegments.ankleTrail) {
-        if (state.showLeftSide) drawTrail(state.ankleTrailLeft, true);
-        if (state.showRightSide) drawTrail(state.ankleTrailRight, false);
       }
 
       // 3. Draw Left (Dashed) then Right (Solid) Exoskeleton Lines
@@ -1514,31 +1561,49 @@
         }
       }
 
-      // 5. Draw Angle Arcs
+      // 5. Draw Angle Arcs (Sagittal vs Frontal)
       if (state.showAngles) {
-        const verticalTop = { x: hip.x, y: hip.y - 80 };
-        drawAngleArcAndText(hip, verticalTop, shoulder, `${trunkLean.toFixed(1)}°`, '#fbbf24');
-        drawAngleArcAndText(knee, hip, ankle, `${kneeFlexion.toFixed(0)}°`, '#c4b5fd');
-        if (wrist) {
-          drawAngleArcAndText(elbow, shoulder, wrist, `${elbowAngle.toFixed(0)}°`, '#5eead4');
+        if (state.viewAngle === 'frontal' && left && right) {
+          const midHipX = (left.hip.x + right.hip.x) / 2;
+          const midHipY = (left.hip.y + right.hip.y) / 2;
+          ctx.save();
+          ctx.font = '600 11px Inter, sans-serif';
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+          ctx.fillRect(midHipX - 36, midHipY - 26, 72, 16);
+          ctx.fillStyle = '#fbbf24';
+          ctx.textAlign = 'center';
+          ctx.fillText(`骨盆 ${state.adv.pelvicDropDeg.toFixed(1)}°`, midHipX, midHipY - 14);
+          ctx.restore();
+          if (isVis(right.knee)) drawAngleArcAndText(right.knee, right.hip, right.ankle, `${Math.max(0, 180 - angleBetween3Points(right.hip, right.knee, right.ankle)).toFixed(0)}°`, '#c4b5fd');
+          if (isVis(left.knee)) drawAngleArcAndText(left.knee, left.hip, left.ankle, `${Math.max(0, 180 - angleBetween3Points(left.hip, left.knee, left.ankle)).toFixed(0)}°`, '#93c5fd');
+        } else {
+          const verticalTop = { x: hip.x, y: hip.y - 80 };
+          drawAngleArcAndText(hip, verticalTop, shoulder, `${trunkLean.toFixed(1)}°`, '#fbbf24');
+          drawAngleArcAndText(knee, hip, ankle, `${kneeFlexion.toFixed(0)}°`, '#c4b5fd');
+          if (wrist) {
+            drawAngleArcAndText(elbow, shoulder, wrist, `${elbowAngle.toFixed(0)}°`, '#5eead4');
+          }
         }
       }
 
-      // 6. Draw Plain White Joint Dots for Visible Sides (頭、肩、肘、髖、膝、踝)
-      drawPlainWhiteJoint(head, 6, '頭');
+      // 6. Draw Plain White Joint Dots for Visible Sides (label active primary side accurately)
+      if (isVis(head)) drawPlainWhiteJoint(head, 6, '頭');
+      const primSide = pose.primarySide || 'right';
       if (state.showLeftSide && left) {
-        drawPlainWhiteJoint(left.shoulder, 5, '');
-        drawPlainWhiteJoint(left.elbow, 4.5, '');
-        drawPlainWhiteJoint(left.hip, 5, '');
-        drawPlainWhiteJoint(left.knee, 5, '');
-        drawPlainWhiteJoint(left.ankle, 5, '');
+        const lbl = primSide === 'left';
+        if (isVis(left.shoulder)) drawPlainWhiteJoint(left.shoulder, lbl ? 5.5 : 4.5, lbl ? '肩(左)' : '');
+        if (isVis(left.elbow)) drawPlainWhiteJoint(left.elbow, lbl ? 5 : 4, lbl ? '肘(左)' : '');
+        if (isVis(left.hip)) drawPlainWhiteJoint(left.hip, lbl ? 6 : 4.5, lbl ? '髖(左)' : '');
+        if (isVis(left.knee)) drawPlainWhiteJoint(left.knee, lbl ? 5.5 : 4.5, lbl ? '膝(左)' : '');
+        if (isVis(left.ankle)) drawPlainWhiteJoint(left.ankle, lbl ? 5.5 : 4.5, lbl ? '踝(左)' : '');
       }
       if (state.showRightSide && right) {
-        drawPlainWhiteJoint(right.shoulder, 5.5, '肩');
-        drawPlainWhiteJoint(right.elbow, 5, '肘');
-        drawPlainWhiteJoint(right.hip, 6, '髖');
-        drawPlainWhiteJoint(right.knee, 5.5, '膝');
-        drawPlainWhiteJoint(right.ankle, 5.5, '踝');
+        const lbl = primSide === 'right';
+        if (isVis(right.shoulder)) drawPlainWhiteJoint(right.shoulder, lbl ? 5.5 : 4.5, lbl ? '肩(右)' : '');
+        if (isVis(right.elbow)) drawPlainWhiteJoint(right.elbow, lbl ? 5 : 4, lbl ? '肘(右)' : '');
+        if (isVis(right.hip)) drawPlainWhiteJoint(right.hip, lbl ? 6 : 4.5, lbl ? '髖(右)' : '');
+        if (isVis(right.knee)) drawPlainWhiteJoint(right.knee, lbl ? 5.5 : 4.5, lbl ? '膝(右)' : '');
+        if (isVis(right.ankle)) drawPlainWhiteJoint(right.ankle, lbl ? 5.5 : 4.5, lbl ? '踝(右)' : '');
       }
 
       // 7. Compute GCT, Speed & Advanced Biomechanics
@@ -1653,11 +1718,14 @@
       const { shoulder, hip, ankle } = primary;
       if (!shoulder || !hip || !ankle) return null;
 
-      // Track ankle vertical range to identify ground contact near lowest point
-      state.gct.maxAnkleY = Math.max(state.gct.maxAnkleY, ankle.y);
-      state.gct.minAnkleY = Math.min(state.gct.minAnkleY, ankle.y);
-      const ySpan = Math.max(20, state.gct.maxAnkleY - state.gct.minAnkleY);
-      const contactThresholdY = state.gct.maxAnkleY - ySpan * 0.16;
+      // Sliding window (45 frames) for ankle vertical range (immune to handheld camera pan/tilt)
+      if (!state.gct.ankleYWin) state.gct.ankleYWin = [];
+      state.gct.ankleYWin.push(ankle.y);
+      if (state.gct.ankleYWin.length > 45) state.gct.ankleYWin.shift();
+      const maxAY = Math.max(...state.gct.ankleYWin);
+      const minAY = Math.min(...state.gct.ankleYWin);
+      const ySpan = Math.max(20, maxAY - minAY);
+      const contactThresholdY = maxAY - ySpan * 0.18;
       const nowContact = ankle.y >= contactThresholdY;
 
       if (nowContact && !state.gct.inContact) {
@@ -1732,19 +1800,23 @@
       const primKneeFlex = 180 - angleBetween3Points(hip, primary.knee, ankle);
       state.adv.maxSwingKnee = Math.max(state.adv.maxSwingKnee, primKneeFlex);
 
-      // Bilateral symmetry tracking
+      // Bilateral symmetry tracking (only when both sides are clearly visible)
       if (leftSide && rightSide) {
-        const rk = 180 - angleBetween3Points(rightSide.hip, rightSide.knee, rightSide.ankle);
-        const lk = 180 - angleBetween3Points(leftSide.hip, leftSide.knee, leftSide.ankle);
-        state.adv.rightKneeMax = Math.max(state.adv.rightKneeMax, rk);
-        state.adv.leftKneeMax = Math.max(state.adv.leftKneeMax, lk);
+        if (isVis(rightSide.hip) && isVis(rightSide.knee) && isVis(rightSide.ankle)) {
+          const rk = 180 - angleBetween3Points(rightSide.hip, rightSide.knee, rightSide.ankle);
+          state.adv.rightKneeMax = Math.max(state.adv.rightKneeMax, rk);
+        }
+        if (isVis(leftSide.hip) && isVis(leftSide.knee) && isVis(leftSide.ankle)) {
+          const lk = 180 - angleBetween3Points(leftSide.hip, leftSide.knee, leftSide.ankle);
+          state.adv.leftKneeMax = Math.max(state.adv.leftKneeMax, lk);
+        }
 
-        if (rightSide.wrist) {
+        if (isVis(rightSide.shoulder) && isVis(rightSide.elbow) && isVis(rightSide.wrist)) {
           const ra = angleBetween3Points(rightSide.shoulder, rightSide.elbow, rightSide.wrist);
           state.adv.rightArmRange.min = Math.min(state.adv.rightArmRange.min, ra);
           state.adv.rightArmRange.max = Math.max(state.adv.rightArmRange.max, ra);
         }
-        if (leftSide.wrist) {
+        if (isVis(leftSide.shoulder) && isVis(leftSide.elbow) && isVis(leftSide.wrist)) {
           const la = angleBetween3Points(leftSide.shoulder, leftSide.elbow, leftSide.wrist);
           state.adv.leftArmRange.min = Math.min(state.adv.leftArmRange.min, la);
           state.adv.leftArmRange.max = Math.max(state.adv.leftArmRange.max, la);
@@ -1754,8 +1826,8 @@
         const lSpan = Math.max(1, state.adv.leftArmRange.max - state.adv.leftArmRange.min);
         state.adv.symmetry = {
           gctPct: state.gct.samples.length >= 2 ? calcPctDiff(avgGct, state.gct.lastMs) : 0,
-          kneePct: calcPctDiff(state.adv.rightKneeMax, state.adv.leftKneeMax),
-          armPct: calcPctDiff(rSpan, lSpan)
+          kneePct: (state.adv.rightKneeMax > 0 && state.adv.leftKneeMax > 0) ? calcPctDiff(state.adv.rightKneeMax, state.adv.leftKneeMax) : 0,
+          armPct: (state.adv.rightArmRange.max > 0 && state.adv.leftArmRange.max > 0) ? calcPctDiff(rSpan, lSpan) : 0
         };
       }
 
@@ -2006,22 +2078,44 @@
       // MediaPipe landmark indices:
       // 0: nose (head), 11/12: L/R shoulder, 13/14: L/R elbow, 15/16: L/R wrist
       // 23/24: L/R hip, 25/26: L/R knee, 27/28: L/R ankle
-      const toPx = (lm) => ({
-        x: offsetX + lm.x * drawW,
-        y: offsetY + lm.y * drawH,
-        v: lm.visibility ?? 1
-      });
+      const toPx = (lm) => {
+        if (!lm) return null;
+        const vis = lm.visibility !== undefined ? lm.visibility : 1;
+        return {
+          x: offsetX + lm.x * drawW,
+          y: offsetY + lm.y * drawH,
+          v: vis
+        };
+      };
+
+      // Head landmark: fallback to ear midpoint in rear view when nose is occluded
+      const rawNose = landmarks[0];
+      let headPt = toPx(rawNose);
+      if (!headPt || headPt.v < 0.4) {
+        const lEar = toPx(landmarks[7]);
+        const rEar = toPx(landmarks[8]);
+        if (lEar && rEar) {
+          headPt = { x: (lEar.x + rEar.x) / 2, y: (lEar.y + rEar.y) / 2, v: Math.max(lEar.v, rEar.v, 0.8) };
+        }
+      }
+
+      const lSh = toPx(landmarks[11]);
+      const rSh = toPx(landmarks[12]);
+      const shMidX = (lSh && rSh) ? (lSh.x + rSh.x) / 2 : (lSh ? lSh.x : 0);
 
       let useRight = true;
       if (state.selectedSide === 'left') useRight = false;
       else if (state.selectedSide === 'right') useRight = true;
-      else {
+      else if (state.viewAngle !== 'frontal' && headPt && Math.abs(headPt.x - shMidX) > 4) {
+        // Stable facing-direction detection: facing left -> left side is closer to camera
+        useRight = headPt.x >= shMidX;
+      } else {
         const visL = (landmarks[11].visibility || 0) + (landmarks[23].visibility || 0) + (landmarks[25].visibility || 0);
         const visR = (landmarks[12].visibility || 0) + (landmarks[24].visibility || 0) + (landmarks[26].visibility || 0);
         useRight = visR >= visL;
       }
 
-      const nose = toPx(landmarks[0]);
+      const nose = headPt;
       const rightSide = {
         head: nose,
         shoulder: toPx(landmarks[12]),
@@ -2068,6 +2162,7 @@
 
       return {
         primary,
+        primarySide: useRight ? 'right' : 'left',
         right: rightSide,
         left: leftSide,
         world3D,
@@ -2114,10 +2209,12 @@
             timeLabel.textContent = `${videoEl.currentTime.toFixed(1)}s`;
           }
 
-          const isNewFrame = Math.abs(videoEl.currentTime - state.lastVideoTime) > 1e-4 || state.needsVideoDetect;
+          const minStep = state.needsVideoDetect ? 1e-4 : 0.025;
+          const isNewFrame = Math.abs(videoEl.currentTime - state.lastVideoTime) >= minStep || state.needsVideoDetect;
           if (state.poseReady && state.poseLandmarker && isNewFrame && !videoEl.seeking) {
             try {
-              const res = state.poseLandmarker.detectForVideo(videoEl, performance.now());
+              const aiInput = getFastAiInput(videoEl, vw, vh);
+              const res = state.poseLandmarker.detectForVideo(aiInput, performance.now());
               if (res.landmarks && res.landmarks.length > 0) {
                 state.smoothedLandmarks = applyLandmarkSmoothing(res.landmarks[0], state.smoothedLandmarks);
                 state.lastVideoLandmarks = state.smoothedLandmarks;
@@ -2164,6 +2261,21 @@
           const ox = (canvas.width - drawW) / 2;
           const oy = (canvas.height - drawH) / 2;
 
+          // Subtle Camera Framing Guide (Head-to-Ankle safe zone)
+          if (state.showVertical) {
+            ctx.save();
+            ctx.setLineDash([6, 6]);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+            ctx.lineWidth = 1.5;
+            const padX = canvas.width * 0.14;
+            const padY = canvas.height * 0.08;
+            ctx.strokeRect(padX, padY, canvas.width - padX * 2, canvas.height - padY * 2);
+            ctx.font = '500 11px Inter, "Noto Sans TC", sans-serif';
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+            ctx.fillText('取景建議：請讓跑者全身（頭至腳踝）保持在虛線框內', padX + 8, padY + 16);
+            ctx.restore();
+          }
+
           // Mirror horizontally only for front ('user') camera
           const mirror = state.camera.facingMode === 'user';
           ctx.save();
@@ -2176,7 +2288,8 @@
 
           if (state.poseReady && state.poseLandmarker) {
             try {
-              const res = state.poseLandmarker.detectForVideo(cameraVideoEl, performance.now());
+              const aiInput = getFastAiInput(cameraVideoEl, vw, vh);
+              const res = state.poseLandmarker.detectForVideo(aiInput, performance.now());
               if (res.landmarks && res.landmarks.length > 0) {
                 const rawLms = mirror
                   ? res.landmarks[0].map(lm => ({ ...lm, x: 1 - lm.x }))
@@ -2351,6 +2464,9 @@
       camPanel.classList.toggle('hidden', newMode !== 'camera');
       dualContainer.classList.toggle('hidden', newMode !== 'dual');
 
+      if (newMode === 'sim' || newMode === 'dual') {
+        adaptViewportAspect(16, 10);
+      }
       if (newMode === 'sim') {
         uploadPromptOverlay.classList.add('hidden');
         cameraPromptOverlay.classList.add('hidden');
@@ -2638,6 +2754,9 @@
         state.speedEst = { prevTime: null, prevHipX: null, prevAnkleX: null, smoothedMs: 0 };
         videoEl.src = url;
         videoEl.playbackRate = state.speed;
+        videoEl.onloadedmetadata = () => {
+          adaptViewportAspect(videoEl.videoWidth, videoEl.videoHeight);
+        };
         videoEl.onloadeddata = () => {
           state.isPlaying = true;
           videoEl.play().catch(() => {});
@@ -2648,6 +2767,7 @@
         videoEl.pause();
         imgEl.src = url;
         imgEl.onload = async () => {
+          adaptViewportAspect(imgEl.naturalWidth, imgEl.naturalHeight);
           if (state.poseReady && state.poseLandmarker) {
             try {
               await state.poseLandmarker.setOptions({ runningMode: 'IMAGE' });
@@ -3080,16 +3200,20 @@
       }
     });
 
-    // --- Dual Video Comparison ---
+    // --- Dual Video Comparison (Fast instant load + downscaled AI) ---
     function setupDualFileInput(inputId, videoId, key) {
-      document.getElementById(inputId).addEventListener('change', async (e) => {
+      document.getElementById(inputId).addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        await initMediaPipe();
+        initMediaPipe(); // load in background, don't block video preview
         const vid = document.getElementById(videoId);
+        vid.preload = 'auto';
+        if (vid.src && vid.src.startsWith('blob:')) {
+          try { URL.revokeObjectURL(vid.src); } catch (_) {}
+        }
         vid.src = URL.createObjectURL(file);
         vid.playbackRate = state.speed;
-        vid.onloadeddata = () => {
+        vid.onloadedmetadata = () => {
           state.dual['has' + key] = true;
           state.dual['lastTime' + key] = -1;
           state.dual['landmarks' + key] = null;
@@ -3100,6 +3224,15 @@
     }
     setupDualFileInput('fileDualA', 'dualVideoA', 'A');
     setupDualFileInput('fileDualB', 'dualVideoB', 'B');
+    document.getElementById('btnDualSyncZero').addEventListener('click', () => {
+      const vA = document.getElementById('dualVideoA');
+      const vB = document.getElementById('dualVideoB');
+      if (state.dual.hasA) vA.currentTime = 0;
+      if (state.dual.hasB) vB.currentTime = 0;
+      state.dual.lastTimeA = -1;
+      state.dual.lastTimeB = -1;
+      showToast('雙影片已同步歸零至起點');
+    });
 
     function renderDualVideoFrame(key, vid, cvs, metaEl) {
       const rect = cvs.parentElement.getBoundingClientRect();
@@ -3123,10 +3256,11 @@
       const ox = (cvs.width - dw) / 2, oy = (cvs.height - dh) / 2;
       c.drawImage(vid, ox, oy, dw, dh);
 
-      const isNew = Math.abs(vid.currentTime - state.dual['lastTime' + key]) > 1e-4;
+      const isNew = Math.abs(vid.currentTime - state.dual['lastTime' + key]) >= 0.03;
       if (state.poseReady && state.poseLandmarker && isNew && !vid.seeking) {
         try {
-          const res = state.poseLandmarker.detectForVideo(vid, performance.now());
+          const aiInput = getFastAiInput(vid, vw, vh);
+          const res = state.poseLandmarker.detectForVideo(aiInput, performance.now());
           if (res.landmarks && res.landmarks.length > 0) {
             state.dual['landmarks' + key] = res.landmarks[0];
             state.dual['lastTime' + key] = vid.currentTime;
@@ -3136,23 +3270,42 @@
       const lms = state.dual['landmarks' + key];
       if (lms) {
         const pose = extractMediaPipePose(lms, dw, dh, ox, oy);
-        const r = pose.right;
-        const drawSeg = (p1, p2, col) => {
-          c.strokeStyle = col; c.lineWidth = 3; c.lineCap = 'round';
-          c.beginPath(); c.moveTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.stroke();
+        const drawDualSide = (side, dashed) => {
+          if (!side) return;
+          const drawSeg = (p1, p2, col) => {
+            if (!isVis(p1) || !isVis(p2)) return;
+            c.save();
+            c.strokeStyle = col; c.lineWidth = 3; c.lineCap = 'round';
+            if (dashed) c.setLineDash([5, 4]);
+            c.beginPath(); c.moveTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.stroke();
+            c.restore();
+          };
+          drawSeg(side.head, side.shoulder, SEGMENT_COLORS.headNeck);
+          drawSeg(side.shoulder, side.hip, SEGMENT_COLORS.torso);
+          drawSeg(side.shoulder, side.elbow, SEGMENT_COLORS.arm);
+          drawSeg(side.hip, side.knee, SEGMENT_COLORS.thigh);
+          drawSeg(side.knee, side.ankle, SEGMENT_COLORS.shin);
+          [side.head, side.shoulder, side.elbow, side.hip, side.knee, side.ankle].forEach(pt => {
+            if (!isVis(pt)) return;
+            c.fillStyle = '#fff'; c.strokeStyle = '#0f172a'; c.lineWidth = 1.2;
+            c.beginPath(); c.arc(pt.x, pt.y, 3.8, 0, Math.PI * 2); c.fill(); c.stroke();
+          });
         };
-        drawSeg(r.head, r.shoulder, SEGMENT_COLORS.headNeck);
-        drawSeg(r.shoulder, r.hip, SEGMENT_COLORS.torso);
-        drawSeg(r.shoulder, r.elbow, SEGMENT_COLORS.arm);
-        drawSeg(r.hip, r.knee, SEGMENT_COLORS.thigh);
-        drawSeg(r.knee, r.ankle, SEGMENT_COLORS.shin);
-        [r.head, r.shoulder, r.elbow, r.hip, r.knee, r.ankle].forEach(pt => {
-          c.fillStyle = '#fff'; c.strokeStyle = '#0f172a'; c.lineWidth = 1.2;
-          c.beginPath(); c.arc(pt.x, pt.y, 4, 0, Math.PI * 2); c.fill(); c.stroke();
-        });
-        const trunk = angleFromVertical(r.hip, r.shoulder, pose.facingDir);
-        const kneeF = Math.max(0, 180 - angleBetween3Points(r.hip, r.knee, r.ankle));
-        metaEl.textContent = `前傾 ${trunk.toFixed(1)}° | 膝屈曲 ${kneeF.toFixed(1)}°`;
+        drawDualSide(pose.left, true);
+        drawDualSide(pose.right, false);
+        const p = pose.primary;
+        const trunk = angleFromVertical(p.hip, p.shoulder, pose.facingDir);
+        const kneeF = Math.max(0, 180 - angleBetween3Points(p.hip, p.knee, p.ankle));
+        metaEl.textContent = `前傾 ${trunk.toFixed(1)}° | 膝屈曲 ${kneeF.toFixed(1)}° (${pose.primarySide === 'left' ? '左側' : '右側'})`;
+        state.dual['metrics' + key] = { trunk, kneeF };
+        const mA = state.dual.metricsA, mB = state.dual.metricsB;
+        if (mA && mB) {
+          const dT = mB.trunk - mA.trunk;
+          const dK = mB.kneeF - mA.kneeF;
+          const sT = (dT > 0 ? '+' : '') + dT.toFixed(1);
+          const sK = (dK > 0 ? '+' : '') + dK.toFixed(1);
+          document.getElementById('dualDeltaBar').textContent = `對比差異 (B - A)：前傾 ${sT}° ｜ 膝屈曲 ${sK}°`;
+        }
       }
     }
 
