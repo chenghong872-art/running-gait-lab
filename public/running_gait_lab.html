@@ -265,8 +265,8 @@
         <!-- Canvas Area -->
         <div id="canvasContainer" class="relative w-full bg-slate-900 aspect-[4/3] sm:aspect-[16/10] flex items-center justify-center overflow-hidden">
           <canvas id="gaitCanvas" class="w-full h-full block"></canvas>
-          <video id="sourceVideo" class="hidden" playsinline webkit-playsinline muted loop crossorigin="anonymous"></video>
-          <video id="cameraVideo" class="hidden" playsinline webkit-playsinline muted autoplay></video>
+          <video id="sourceVideo" class="absolute w-px h-px opacity-0 pointer-events-none" playsinline webkit-playsinline muted loop preload="auto"></video>
+          <video id="cameraVideo" class="absolute w-px h-px opacity-0 pointer-events-none" playsinline webkit-playsinline muted autoplay></video>
           <img id="sourceImage" class="hidden" alt="uploaded" crossorigin="anonymous" />
 
           <!-- Biofeedback Alert Pill -->
@@ -288,7 +288,7 @@
               </div>
               <div class="relative flex-1 flex items-center justify-center overflow-hidden">
                 <canvas id="dualCanvasA" class="w-full h-full block"></canvas>
-                <video id="dualVideoA" class="hidden" playsinline webkit-playsinline muted loop></video>
+                <video id="dualVideoA" class="absolute w-px h-px opacity-0 pointer-events-none" playsinline webkit-playsinline muted loop preload="auto"></video>
               </div>
               <div id="dualMetricA" class="px-2 py-1 bg-slate-900/90 text-[10px] text-slate-300 mono-num border-t border-slate-800">
                 前傾 --° | 膝屈曲 --°
@@ -304,7 +304,7 @@
               </div>
               <div class="relative flex-1 flex items-center justify-center overflow-hidden">
                 <canvas id="dualCanvasB" class="w-full h-full block"></canvas>
-                <video id="dualVideoB" class="hidden" playsinline webkit-playsinline muted loop></video>
+                <video id="dualVideoB" class="absolute w-px h-px opacity-0 pointer-events-none" playsinline webkit-playsinline muted loop preload="auto"></video>
               </div>
               <div id="dualMetricB" class="px-2 py-1 bg-slate-900/90 text-[10px] text-slate-300 mono-num border-t border-slate-800">
                 前傾 --° | 膝屈曲 --°
@@ -978,11 +978,14 @@
     const canvasContainer = document.getElementById('canvasContainer');
     function adaptViewportAspect(vw, vh) {
       if (state.mode === 'dual') {
+        canvasContainer.style.aspectRatio = '';
         canvasContainer.className = 'relative w-full bg-slate-900 aspect-[4/3] sm:aspect-[16/10] flex items-center justify-center overflow-hidden';
-      } else if (vw && vh && vh > vw) {
-        // Portrait 9:16 video: expand height so runner is large & clear without huge side black bars
-        canvasContainer.className = 'relative w-full bg-slate-900 aspect-[3/4] max-h-[580px] flex items-center justify-center overflow-hidden';
+      } else if (vw && vh && state.mode !== 'sim') {
+        // Preserve exact native aspect ratio of camera or uploaded video
+        canvasContainer.style.aspectRatio = `${vw} / ${vh}`;
+        canvasContainer.className = 'relative w-full bg-slate-900 max-h-[75vh] flex items-center justify-center overflow-hidden';
       } else {
+        canvasContainer.style.aspectRatio = '';
         canvasContainer.className = 'relative w-full bg-slate-900 aspect-[4/3] sm:aspect-[16/10] flex items-center justify-center overflow-hidden';
       }
       resizeCanvas();
@@ -2379,6 +2382,9 @@
         state.camera.stream = stream;
         cameraVideoEl.srcObject = stream;
         await cameraVideoEl.play();
+        if (cameraVideoEl.videoWidth && cameraVideoEl.videoHeight) {
+          adaptViewportAspect(cameraVideoEl.videoWidth, cameraVideoEl.videoHeight);
+        }
         state.camera.active = true;
         state.ankleTrailRight = [];
       state.ankleTrailLeft = [];
@@ -2735,20 +2741,29 @@
       angleChart.update();
     });
 
-    // File Upload Handling
+    // File Upload Handling (Mobile iOS/Android compatible)
     async function handleFileSelect(file) {
       if (!file) return;
-      await initMediaPipe();
+      initMediaPipe(); // load AI in background so video preview appears immediately on mobile
       const url = URL.createObjectURL(file);
       uploadPromptOverlay.classList.add('hidden');
       document.getElementById('btnChangeMedia').classList.remove('hidden');
       state.history = [];
+      state.ankleTrailRight = [];
+      state.ankleTrailLeft = [];
 
-      if (file.type.startsWith('video/')) {
+      const fname = (file.name || '').toLowerCase();
+      const ftype = (file.type || '').toLowerCase();
+      const isVideo = ftype.startsWith('video/') || /\.(mp4|mov|m4v|webm|avi|mkv|3gp)$/i.test(fname);
+      const isImage = ftype.startsWith('image/') || /\.(jpg|jpeg|png|webp|heic|gif)$/i.test(fname);
+
+      if (isVideo || (!isImage && ftype === '')) {
         state.mediaType = 'video';
         state.staticImageLandmarks = null;
         state.lastVideoTime = -1;
         state.lastVideoLandmarks = null;
+        state.smoothedLandmarks = null;
+        state.smoothedWorldLandmarks = null;
         state.needsVideoDetect = true;
         state.gct = { inContact: false, contactStartTime: null, lastMs: null, samples: [], maxAnkleY: 0, minAnkleY: 99999 };
         state.speedEst = { prevTime: null, prevHipX: null, prevAnkleX: null, smoothedMs: 0 };
@@ -2756,13 +2771,19 @@
         videoEl.playbackRate = state.speed;
         videoEl.onloadedmetadata = () => {
           adaptViewportAspect(videoEl.videoWidth, videoEl.videoHeight);
+          state.isPlaying = true;
+          videoEl.play().catch(() => {});
         };
         videoEl.onloadeddata = () => {
           state.isPlaying = true;
           videoEl.play().catch(() => {});
           showToast('已載入跑步影片，開始偵測骨骼與關節角度');
         };
-      } else if (file.type.startsWith('image/')) {
+        videoEl.onerror = () => {
+          showToast('此影片格式無法在瀏覽器播放，建議轉存為 MP4');
+        };
+        videoEl.load();
+      } else if (isImage) {
         state.mediaType = 'image';
         videoEl.pause();
         imgEl.src = url;
@@ -2787,8 +2808,14 @@
       }
     }
 
-    document.getElementById('fileInput').addEventListener('change', (e) => handleFileSelect(e.target.files[0]));
-    document.getElementById('fileInputSecondary').addEventListener('change', (e) => handleFileSelect(e.target.files[0]));
+    document.getElementById('fileInput').addEventListener('change', (e) => {
+      if (e.target.files[0]) handleFileSelect(e.target.files[0]);
+      e.target.value = '';
+    });
+    document.getElementById('fileInputSecondary').addEventListener('change', (e) => {
+      if (e.target.files[0]) handleFileSelect(e.target.files[0]);
+      e.target.value = '';
+    });
 
     // Right Panel Tab Switcher (基礎角度 vs 進階數據)
     const tabBasic = document.getElementById('tabBasicMetrics');
@@ -3220,6 +3247,8 @@
           if (state.isPlaying) vid.play().catch(() => {});
           showToast(`已載入對比影片 ${key}`);
         };
+        vid.load();
+        e.target.value = '';
       });
     }
     setupDualFileInput('fileDualA', 'dualVideoA', 'A');
