@@ -1,0 +1,3289 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>Running Gait Lab — 跑步動作骨骼與關節角度分析系統</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    body {
+      font-family: 'Inter', 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f8fafc;
+      color: #0f172a;
+    }
+    .mono-num {
+      font-variant-numeric: tabular-nums;
+    }
+    input[type="range"] {
+      accent-color: #334155;
+    }
+    @media (max-width: 640px) {
+      input[type="range"] {
+        height: 8px;
+      }
+      button, select {
+        min-height: 34px;
+      }
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col">
+  <!-- Top Navigation -->
+  <header class="bg-white border-b border-slate-200 sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2">
+      <div class="flex items-center gap-2 min-w-0">
+        <div class="w-8 h-8 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0">
+          <i data-lucide="activity" class="w-4 h-4"></i>
+        </div>
+        <div class="truncate">
+          <h1 class="text-sm sm:text-base font-semibold text-slate-900 truncate">Running Gait Lab</h1>
+          <p class="text-[11px] text-slate-500 hidden md:block">體外骨骼連線與關節角度運動學分析</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex items-center gap-1.5 shrink-0 order-2 sm:order-3">
+        <button id="btnMetronome" type="button" title="步頻聽覺節拍器" class="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition">
+          <i data-lucide="volume-2" class="w-3.5 h-3.5"></i>
+          <span id="labelMetronome" class="hidden sm:inline">節拍器：關</span>
+        </button>
+        <button id="btnOpenReport" type="button" title="選手評估報告" class="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition">
+          <i data-lucide="file-text" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">報告</span>
+        </button>
+        <button id="btnExportCsv" type="button" title="匯出 CSV" class="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition">
+          <i data-lucide="download" class="w-3.5 h-3.5"></i>
+          <span class="hidden md:inline">CSV</span>
+        </button>
+        <button id="btnAthleteModal" type="button" title="選手檔案與歷史紀錄" class="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition">
+          <i data-lucide="users" class="w-3.5 h-3.5"></i>
+          <span id="labelActiveAthlete" class="hidden sm:inline max-w-[80px] truncate">選手檔案</span>
+        </button>
+        <button id="btnMobileHelp" type="button" title="手機開啟與部署說明" class="inline-flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-slate-700 bg-slate-100 border border-slate-300 rounded-lg hover:bg-slate-200 transition">
+          <i data-lucide="smartphone" class="w-3.5 h-3.5"></i>
+          <span class="hidden sm:inline">手機版</span>
+        </button>
+      </div>
+
+      <!-- Mode Switcher (Full row on mobile, centered on desktop) -->
+      <div class="w-full sm:w-auto order-3 sm:order-2 flex items-center justify-center bg-slate-100 p-1 rounded-lg border border-slate-200">
+        <button id="btnModeSim" class="flex-1 sm:flex-none px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md bg-white text-slate-900 shadow-sm transition">
+          模擬跑者
+        </button>
+        <button id="btnModeUpload" class="flex-1 sm:flex-none px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 transition">
+          上傳影片
+        </button>
+        <button id="btnModeCamera" class="flex-1 sm:flex-none px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 transition">
+          鏡頭拍攝
+        </button>
+        <button id="btnModeDual" class="flex-1 sm:flex-none px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 transition">
+          雙影片對比
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Athlete Assessment Report Modal -->
+  <div id="reportModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-900">選手跑步生物力學評估摘要</h3>
+          <p class="text-[11px] text-slate-500">自動彙整即時數據、風險警示與訓練建議</p>
+        </div>
+        <button id="btnCloseReport" type="button" class="p-1 rounded-lg text-slate-500 hover:bg-slate-200/70">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div id="reportBody" class="p-5 overflow-y-auto text-xs text-slate-700 space-y-3"></div>
+      <div class="px-5 py-3 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2">
+        <button id="btnCopyReport" type="button" class="px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-100 transition">複製摘要文字</button>
+        <button id="btnPrintReport" type="button" class="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 transition">列印 / 存成 PDF</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Athlete Profile & History Modal -->
+  <div id="athleteModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-xl w-full overflow-hidden flex flex-col max-h-[90vh]">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div>
+          <h3 class="text-sm font-semibold text-slate-900">選手檔案與歷次檢測紀錄</h3>
+          <p class="text-[11px] text-slate-500">本機儲存選手資料，追蹤復健與訓練週期變化</p>
+        </div>
+        <button id="btnCloseAthlete" type="button" class="p-1 rounded-lg text-slate-500 hover:bg-slate-200/70">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div class="p-5 overflow-y-auto space-y-4 text-xs">
+        <!-- Select or Create Athlete -->
+        <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end bg-slate-50 p-3 rounded-xl border border-slate-200">
+          <div class="sm:col-span-5">
+            <label class="block text-[11px] text-slate-600 mb-1">選擇選手</label>
+            <select id="athleteSelect" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 text-xs"></select>
+          </div>
+          <div class="sm:col-span-4">
+            <label class="block text-[11px] text-slate-600 mb-1">新增選手姓名</label>
+            <input id="inputNewAthleteName" type="text" placeholder="例：王小明" class="w-full border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-800 text-xs" />
+          </div>
+          <div class="sm:col-span-3">
+            <label class="block text-[11px] text-slate-600 mb-1">身高 (cm)</label>
+            <div class="flex gap-1">
+              <input id="inputNewAthleteHeight" type="number" min="120" max="220" value="172" class="w-full border border-slate-300 rounded-lg px-2 py-1.5 bg-white text-slate-800 text-xs mono-num" />
+              <button id="btnAddAthlete" type="button" class="px-2.5 py-1.5 rounded-lg bg-slate-900 text-white font-medium hover:bg-slate-800 shrink-0">新增</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Save Current Test Record -->
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="text-slate-600">
+            目前選手：<strong id="athleteCurrentLabel" class="text-slate-900">預設跑者 (170 cm)</strong>
+          </div>
+          <button id="btnSaveHistoryRecord" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600 text-white font-medium hover:bg-emerald-700 transition">
+            <i data-lucide="save" class="w-3.5 h-3.5"></i>
+            儲存本次檢測數據
+          </button>
+        </div>
+
+        <!-- Longitudinal Trend Chart -->
+        <div class="bg-white border border-slate-200 rounded-xl p-3">
+          <div class="text-[11px] font-semibold text-slate-800 mb-2">歷次追蹤趨勢（軀幹前傾 / 過跨距離）</div>
+          <div class="relative h-36 w-full">
+            <canvas id="historyChart"></canvas>
+          </div>
+        </div>
+
+        <!-- History Table -->
+        <div class="overflow-x-auto border border-slate-200 rounded-xl">
+          <table class="w-full text-[11px] text-left">
+            <thead class="bg-slate-50 border-b border-slate-200 text-slate-500">
+              <tr>
+                <th class="px-2.5 py-1.5">日期時間</th>
+                <th class="px-2 py-1.5 text-right">前傾</th>
+                <th class="px-2 py-1.5 text-right">觸地</th>
+                <th class="px-2 py-1.5 text-right">過跨</th>
+                <th class="px-2 py-1.5 text-right">不對稱</th>
+                <th class="px-2 py-1.5">著地型態</th>
+              </tr>
+            </thead>
+            <tbody id="athleteHistoryBody" class="divide-y divide-slate-100 mono-num text-slate-800"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Usage & Hosting Modal -->
+  <div id="mobileModal" class="hidden fixed inset-0 z-50 bg-slate-900/60 flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl border border-slate-200 shadow-xl max-w-md w-full overflow-hidden flex flex-col">
+      <div class="px-5 py-3.5 border-b border-slate-200 flex items-center justify-between bg-slate-50">
+        <div class="flex items-center gap-2">
+          <i data-lucide="smartphone" class="w-4 h-4 text-slate-700"></i>
+          <h3 class="text-sm font-semibold text-slate-900">如何在手機上開啟並使用鏡頭拍攝</h3>
+        </div>
+        <button id="btnCloseMobile" type="button" class="p-1 rounded-lg text-slate-500 hover:bg-slate-200/70">
+          <i data-lucide="x" class="w-4 h-4"></i>
+        </button>
+      </div>
+      <div class="p-5 text-xs text-slate-700 space-y-3 leading-relaxed">
+        <div class="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900">
+          <strong>重要限制：</strong>iPhone (Safari) 與 Android (Chrome) 規定「開啟相機鏡頭」必須在 <strong>HTTPS 網址</strong> 下運作；直接雙擊本機檔案 (file://) 無法啟用鏡頭。
+        </div>
+        <ol class="list-decimal list-inside space-y-2">
+          <li><strong>下載本單一 HTML 檔</strong>（從右側或下方下載 <code>running-gait-analyzer.html</code>，並重新命名為 <code>index.html</code>）。</li>
+          <li><strong>免費取得 HTTPS 網址（10 秒完成）</strong>：將檔案拖曳到 <strong>Netlify Drop (app.netlify.com/drop)</strong>、<strong>Vercel</strong>、或上傳至跟老師一樣的 <strong>Firebase Hosting</strong>。</li>
+          <li><strong>手機開啟並加到主畫面</strong>：用手機瀏覽器打開該 HTTPS 網址，點「分享 → 加入主畫面」，即可像原生 App 一樣全螢幕切換前後鏡頭拍攝與分析！</li>
+        </ol>
+      </div>
+      <div class="px-5 py-3 border-t border-slate-200 bg-slate-50 flex justify-end">
+        <button id="btnConfirmMobile" type="button" class="px-4 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 transition">我知道了</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Banner -->
+  <div id="toastBox" class="hidden fixed bottom-4 right-4 z-50 max-w-sm bg-slate-900 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg border border-slate-700"></div>
+
+  <!-- Main Workspace -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-4 sm:py-6 grid grid-cols-1 lg:grid-cols-12 gap-5">
+    <!-- Left Column: Canvas Viewport & Playback Controls -->
+    <section class="lg:col-span-7 flex flex-col gap-4">
+      <!-- Viewport Card -->
+      <div class="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+        <div class="px-4 py-2.5 border-b border-slate-200 flex flex-wrap items-center justify-between gap-2 bg-slate-50/70">
+          <div class="flex items-center gap-2">
+            <span id="phaseBadge" class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-slate-200 text-slate-800">
+              步態週期：站立中期 (Mid-Stance)
+            </span>
+            <span id="aiStatusBadge" class="hidden inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-amber-100 text-amber-800">
+              尚未載入媒體
+            </span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2.5 text-xs text-slate-600">
+            <div class="flex items-center gap-1">
+              <span class="text-[11px] font-medium text-slate-600">拍攝視角：</span>
+              <select id="viewAngleSelect" class="border border-slate-300 rounded-md px-2 py-0.5 text-[11px] font-medium bg-white text-slate-800">
+                <option value="sagittal">側面 (矢狀面)</option>
+                <option value="frontal">背面 / 正面 (額狀面)</option>
+                <option value="oblique3d">斜角 45° (3D 空間校正)</option>
+              </select>
+            </div>
+            <label class="inline-flex items-center gap-1 cursor-pointer select-none">
+              <input id="chkShowAngles" type="checkbox" checked class="rounded border-slate-300" />
+              <span>角度</span>
+            </label>
+            <label class="inline-flex items-center gap-1 cursor-pointer select-none">
+              <input id="chkShowVertical" type="checkbox" checked class="rounded border-slate-300" />
+              <span>校準線</span>
+            </label>
+            <label class="inline-flex items-center gap-1 cursor-pointer select-none">
+              <input id="chkBiofeedback" type="checkbox" checked class="rounded border-slate-300" />
+              <span>即時警示</span>
+            </label>
+            <div class="flex items-center gap-1">
+              <span class="text-[11px] font-medium text-slate-600">平滑濾波：</span>
+              <select id="smoothSelect" class="border border-slate-300 rounded-md px-1.5 py-0.5 text-[11px] font-medium bg-white text-slate-800">
+                <option value="off">關</option>
+                <option value="low">低</option>
+                <option value="med" selected>中 (推薦)</option>
+                <option value="high">高</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <!-- Canvas Area -->
+        <div id="canvasContainer" class="relative w-full bg-slate-900 aspect-[4/3] sm:aspect-[16/10] flex items-center justify-center overflow-hidden">
+          <canvas id="gaitCanvas" class="w-full h-full block"></canvas>
+          <video id="sourceVideo" class="hidden" playsinline webkit-playsinline muted loop crossorigin="anonymous"></video>
+          <video id="cameraVideo" class="hidden" playsinline webkit-playsinline muted autoplay></video>
+          <img id="sourceImage" class="hidden" alt="uploaded" crossorigin="anonymous" />
+
+          <!-- Biofeedback Alert Pill -->
+          <div id="biofeedbackPill" class="hidden absolute top-3 left-3 z-20 px-3 py-1.5 rounded-lg bg-rose-600/90 text-white text-xs font-semibold shadow-md flex items-center gap-1.5">
+            <i data-lucide="alert-triangle" class="w-3.5 h-3.5 shrink-0"></i>
+            <span id="biofeedbackText">警示</span>
+          </div>
+
+          <!-- Dual-Video Side-by-Side Comparison View -->
+          <div id="dualVideoContainer" class="hidden absolute inset-0 bg-slate-950 grid grid-cols-2 gap-1 p-1 z-10">
+            <div class="relative bg-slate-900 rounded-lg overflow-hidden flex flex-col">
+              <div class="px-2 py-1 bg-slate-800/90 flex items-center justify-between text-[10px] text-slate-200 z-10">
+                <span class="font-semibold">A：前測 / 調整前</span>
+                <label class="cursor-pointer underline hover:text-white">
+                  載入影片 A
+                  <input id="fileDualA" type="file" accept="video/*" class="hidden" />
+                </label>
+              </div>
+              <div class="relative flex-1 flex items-center justify-center overflow-hidden">
+                <canvas id="dualCanvasA" class="w-full h-full block"></canvas>
+                <video id="dualVideoA" class="hidden" playsinline webkit-playsinline muted loop></video>
+              </div>
+              <div id="dualMetricA" class="px-2 py-1 bg-slate-900/90 text-[10px] text-slate-300 mono-num border-t border-slate-800">
+                前傾 --° | 膝屈曲 --°
+              </div>
+            </div>
+            <div class="relative bg-slate-900 rounded-lg overflow-hidden flex flex-col">
+              <div class="px-2 py-1 bg-slate-800/90 flex items-center justify-between text-[10px] text-slate-200 z-10">
+                <span class="font-semibold">B：後測 / 調整後</span>
+                <label class="cursor-pointer underline hover:text-white">
+                  載入影片 B
+                  <input id="fileDualB" type="file" accept="video/*" class="hidden" />
+                </label>
+              </div>
+              <div class="relative flex-1 flex items-center justify-center overflow-hidden">
+                <canvas id="dualCanvasB" class="w-full h-full block"></canvas>
+                <video id="dualVideoB" class="hidden" playsinline webkit-playsinline muted loop></video>
+              </div>
+              <div id="dualMetricB" class="px-2 py-1 bg-slate-900/90 text-[10px] text-slate-300 mono-num border-t border-slate-800">
+                前傾 --° | 膝屈曲 --°
+              </div>
+            </div>
+          </div>
+
+          <!-- Camera Prompt Overlay -->
+          <div id="cameraPromptOverlay" class="hidden absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-900/90">
+            <div class="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mb-3 text-slate-300">
+              <i data-lucide="camera" class="w-5 h-5"></i>
+            </div>
+            <p class="text-sm font-medium text-slate-100 mb-1">即時鏡頭拍攝與骨骼對點</p>
+            <p class="text-xs text-slate-400 mb-4 max-w-md">開啟相機後可切換前後鏡頭，直接對人即時標記頭、肩、肘、髖、膝、踝並錄製分析影片。</p>
+            <button id="btnStartCameraOverlay" type="button" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-slate-900 text-xs font-semibold hover:bg-slate-100 transition">
+              <i data-lucide="video" class="w-4 h-4"></i>
+              開啟相機鏡頭
+            </button>
+          </div>
+
+          <!-- Upload Overlay (only shown in upload mode when no media) -->
+          <div id="uploadPromptOverlay" class="hidden absolute inset-0 flex flex-col items-center justify-center p-6 text-center bg-slate-900/90">
+            <div class="w-12 h-12 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center mb-3 text-slate-300">
+              <i data-lucide="upload" class="w-5 h-5"></i>
+            </div>
+            <p class="text-sm font-medium text-slate-100 mb-1">上傳側面跑步影片或照片</p>
+            <p class="text-xs text-slate-400 mb-4 max-w-md">系統會在瀏覽器本機執行骨骼關鍵點偵測（頭、肩、肘、髖、膝、踝），不會將影片上傳至外部伺服器。</p>
+            <label class="cursor-pointer inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-white text-slate-900 text-xs font-semibold hover:bg-slate-100 transition">
+              <i data-lucide="file-video" class="w-4 h-4"></i>
+              選擇影片或圖片
+              <input id="fileInput" type="file" accept="video/*,image/*" class="hidden" />
+            </label>
+          </div>
+        </div>
+
+        <!-- Playback & Simulation Controls -->
+        <div class="p-3.5 border-t border-slate-200 bg-white flex flex-col gap-3">
+          <!-- Playback Row -->
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-1.5">
+              <button id="btnPlayPause" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 transition">
+                <i id="iconPlayPause" data-lucide="pause" class="w-3.5 h-3.5"></i>
+                <span id="labelPlayPause">暫停</span>
+              </button>
+              <button id="btnStepBack" title="上一幀" class="p-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition">
+                <i data-lucide="chevron-left" class="w-4 h-4"></i>
+              </button>
+              <button id="btnStepFwd" title="下一幀" class="p-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition">
+                <i data-lucide="chevron-right" class="w-4 h-4"></i>
+              </button>
+              <button id="btnReset" title="重置週期" class="p-1.5 rounded-lg border border-slate-200 text-slate-700 hover:bg-slate-100 transition">
+                <i data-lucide="rotate-ccw" class="w-4 h-4"></i>
+              </button>
+              <button id="btnProtractor" type="button" title="手繪量角器（點擊畫面 3 點測角）" class="inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-100 transition">
+                <i data-lucide="compass" class="w-3.5 h-3.5"></i>
+                <span class="hidden sm:inline">量角器</span>
+              </button>
+              <button id="btnClearProtractor" type="button" title="清除手繪量角器" class="hidden px-2 py-1.5 rounded-lg border border-rose-200 text-rose-700 text-xs font-medium hover:bg-rose-50 transition">
+                清除量角
+              </button>
+            </div>
+
+            <!-- Speed Selector -->
+            <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-lg">
+              <span class="text-[11px] text-slate-500 px-1.5">倍速</span>
+              <button data-speed="0.25" class="speed-btn px-2 py-0.5 text-[11px] font-medium rounded text-slate-600 hover:text-slate-900">0.25x</button>
+              <button data-speed="0.5" class="speed-btn px-2 py-0.5 text-[11px] font-medium rounded text-slate-600 hover:text-slate-900">0.5x</button>
+              <button data-speed="1" class="speed-btn px-2 py-0.5 text-[11px] font-medium rounded bg-white text-slate-900 shadow-sm">1.0x</button>
+            </div>
+
+            <!-- Upload Another File (Upload Mode) -->
+            <label id="btnChangeMedia" class="hidden cursor-pointer inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+              <i data-lucide="folder-open" class="w-3.5 h-3.5"></i>
+              更換檔案
+              <input id="fileInputSecondary" type="file" accept="video/*,image/*" class="hidden" />
+            </label>
+          </div>
+
+          <!-- Timeline Scrubber -->
+          <div class="flex items-center gap-3">
+            <span id="timeLabel" class="text-[11px] text-slate-500 mono-num w-14">0%</span>
+            <input id="timelineSlider" type="range" min="0" max="100" step="0.5" value="0" class="flex-1 h-1.5 bg-slate-200 rounded-lg cursor-pointer" />
+            <span id="fpsLabel" class="text-[11px] text-slate-500 mono-num w-16 text-right">60 fps</span>
+          </div>
+
+          <!-- Simulator Parameter Controls (Visible in Sim Mode) -->
+          <div id="simControlsPanel" class="pt-2 border-t border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-600 font-medium">跑姿情境預設</span>
+              </div>
+              <select id="presetSelect" class="w-full text-xs border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white text-slate-800">
+                <option value="balanced">標準效率跑姿 (前傾 8°)</option>
+                <option value="overstride">過度跨步 / 後傾 (前傾 2°)</option>
+                <option value="excessiveLean">軀幹過度前傾 (前傾 18°)</option>
+                <option value="highCadence">高步頻衝刺 (前傾 12°)</option>
+              </select>
+            </div>
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-600 font-medium">軀幹前傾設定</span>
+                <span id="valLeanTarget" class="mono-num text-slate-900 font-semibold">8°</span>
+              </div>
+              <input id="sliderLean" type="range" min="0" max="22" step="1" value="8" class="w-full h-1.5 bg-slate-200 rounded-lg cursor-pointer" />
+            </div>
+            <div>
+              <div class="flex justify-between text-[11px] mb-1">
+                <span class="text-slate-600 font-medium">步頻 (Cadence)</span>
+                <span id="valCadence" class="mono-num text-slate-900 font-semibold">176 spm</span>
+              </div>
+              <input id="sliderCadence" type="range" min="145" max="205" step="1" value="176" class="w-full h-1.5 bg-slate-200 rounded-lg cursor-pointer" />
+            </div>
+          </div>
+
+          <!-- Upload Mode Side & Calibration (Visible in Upload Mode) -->
+          <div id="uploadControlsPanel" class="hidden pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex flex-wrap items-center gap-3 text-xs">
+              <div class="flex items-center gap-1.5">
+                <span class="text-slate-600 font-medium">分析側：</span>
+                <select id="sideSelect" class="border border-slate-300 rounded-lg px-2 py-1 text-xs bg-white text-slate-800">
+                  <option value="auto">自動偵測</option>
+                  <option value="left">左側 (Left)</option>
+                  <option value="right">右側 (Right)</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-slate-600 font-medium">身高校正：</span>
+                <input id="inputHeightCm" type="number" min="120" max="220" value="170" class="w-16 border border-slate-300 rounded-lg px-2 py-1 text-xs bg-white text-slate-800 mono-num" />
+                <span class="text-slate-500">cm</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-slate-600 font-medium">場景：</span>
+                <select id="envSelect" class="border border-slate-300 rounded-lg px-2 py-1 text-xs bg-white text-slate-800">
+                  <option value="auto">自動判斷</option>
+                  <option value="overground">戶外地面</option>
+                  <option value="treadmill">跑步機</option>
+                </select>
+              </div>
+            </div>
+            <p class="text-[11px] text-slate-500">建議橫向側面拍攝以獲得最準確的關節角度與速度估算</p>
+          </div>
+
+          <!-- Camera Mode Controls (Visible in Camera Mode) -->
+          <div id="cameraControlsPanel" class="hidden pt-2 border-t border-slate-100 flex flex-col gap-2.5">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <button id="btnToggleCamera" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-900 text-white text-xs font-medium hover:bg-slate-800 transition">
+                  <i data-lucide="camera" class="w-3.5 h-3.5"></i>
+                  <span id="labelToggleCamera">開啟鏡頭</span>
+                </button>
+                <button id="btnSwitchCamera" type="button" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 text-xs font-medium hover:bg-slate-50 transition">
+                  <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i>
+                  <span id="labelCameraFacing">鏡頭：後置</span>
+                </button>
+                <button id="btnRecordVideo" type="button" disabled class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-rose-300 bg-rose-50 text-rose-700 text-xs font-medium hover:bg-rose-100 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                  <span id="recordDot" class="w-2 h-2 rounded-full bg-rose-600"></span>
+                  <span id="labelRecordVideo">開始錄影</span>
+                </button>
+                <span id="recordTimerBadge" class="hidden text-xs font-semibold text-rose-600 mono-num">00:00</span>
+              </div>
+              <div id="recordedActions" class="hidden flex items-center gap-2">
+                <button id="btnDownloadRecording" type="button" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-slate-300 text-xs font-medium text-slate-700 hover:bg-slate-50 transition">
+                  <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                  下載影片
+                </button>
+                <button id="btnAnalyzeRecording" type="button" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-slate-800 text-white text-xs font-medium hover:bg-slate-700 transition">
+                  <i data-lucide="play-circle" class="w-3.5 h-3.5"></i>
+                  逐幀分析
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interactive Multi-Select Segment Filter for Exoskeleton Lines -->
+      <div class="bg-white border border-slate-200 rounded-xl p-3.5 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+          <div>
+            <h2 class="text-xs font-semibold text-slate-800">體外骨骼連線顯示篩選（點擊可單選或多選）</h2>
+            <p class="text-[11px] text-slate-500">實線＝右側肢體、虛線＝左側肢體 ｜ 白點標記：頭、肩、肘、髖、膝、踝</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <button id="btnSideRight" type="button" class="px-2 py-1 text-[11px] font-medium rounded border border-slate-400 bg-slate-100 text-slate-900 transition">右側 (實線) ✓</button>
+            <button id="btnSideLeft" type="button" class="px-2 py-1 text-[11px] font-medium rounded border border-slate-400 bg-slate-100 text-slate-900 transition">左側 (虛線) ✓</button>
+            <span class="text-slate-300">|</span>
+            <button id="btnSegAll" type="button" class="px-2 py-1 text-[11px] font-medium rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition">全選</button>
+            <button id="btnSegNone" type="button" class="px-2 py-1 text-[11px] font-medium rounded border border-slate-300 text-slate-700 hover:bg-slate-50 transition">全關</button>
+          </div>
+        </div>
+        <div id="segmentToggleGroup" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-[11px]">
+          <button type="button" data-seg="headNeck" class="seg-btn flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-400 text-slate-900 font-medium transition">
+            <span class="flex items-center gap-1.5 truncate"><span class="w-3 h-1.5 rounded-full shrink-0" style="background-color: #94a3b8;"></span><span class="truncate">頭頸連線</span></span>
+            <span class="seg-check text-[10px] text-slate-700">✓</span>
+          </button>
+          <button type="button" data-seg="torso" class="seg-btn flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-400 text-slate-900 font-medium transition">
+            <span class="flex items-center gap-1.5 truncate"><span class="w-3 h-1.5 rounded-full shrink-0" style="background-color: #d97706;"></span><span class="truncate">軀幹 (肩-髖)</span></span>
+            <span class="seg-check text-[10px] text-slate-700">✓</span>
+          </button>
+          <button type="button" data-seg="arm" class="seg-btn flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-400 text-slate-900 font-medium transition">
+            <span class="flex items-center gap-1.5 truncate"><span class="w-3 h-1.5 rounded-full shrink-0" style="background-color: #0d9488;"></span><span class="truncate">上肢 (肩-肘)</span></span>
+            <span class="seg-check text-[10px] text-slate-700">✓</span>
+          </button>
+          <button type="button" data-seg="thigh" class="seg-btn flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-400 text-slate-900 font-medium transition">
+            <span class="flex items-center gap-1.5 truncate"><span class="w-3 h-1.5 rounded-full shrink-0" style="background-color: #2563eb;"></span><span class="truncate">大腿 (髖-膝)</span></span>
+            <span class="seg-check text-[10px] text-slate-700">✓</span>
+          </button>
+          <button type="button" data-seg="shin" class="seg-btn flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-400 text-slate-900 font-medium transition">
+            <span class="flex items-center gap-1.5 truncate"><span class="w-3 h-1.5 rounded-full shrink-0" style="background-color: #6d28d9;"></span><span class="truncate">小腿 (膝-踝)</span></span>
+            <span class="seg-check text-[10px] text-slate-700">✓</span>
+          </button>
+          <button type="button" data-seg="ankleTrail" class="seg-btn flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-400 text-slate-900 font-medium transition">
+            <span class="flex items-center gap-1.5 truncate"><span class="w-3 h-1.5 rounded-full shrink-0" style="background-color: #38bdf8;"></span><span class="truncate">踝關節軌跡</span></span>
+            <span class="seg-check text-[10px] text-slate-700">✓</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Column: Joint Angles & Waveform Chart -->
+    <section class="lg:col-span-5 flex flex-col gap-4">
+      <!-- Primary / Advanced Tabbed Panel -->
+      <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+        <div class="flex items-center justify-between gap-2 mb-3">
+          <div class="flex items-center bg-slate-100 p-1 rounded-lg border border-slate-200">
+            <button id="tabBasicMetrics" type="button" class="px-2.5 py-1 text-xs font-semibold rounded-md bg-white text-slate-900 shadow-sm transition">
+              基礎角度數據
+            </button>
+            <button id="tabAdvancedMetrics" type="button" class="px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 transition">
+              進階數據 (防護/體能)
+            </button>
+          </div>
+          <span class="text-[11px] text-slate-500">即時生物力學</span>
+        </div>
+
+        <div id="panelBasicMetrics">
+
+        <!-- Highlight: Trunk Forward Lean -->
+        <div class="mb-3 p-3.5 rounded-xl bg-amber-50/70 border border-amber-200/80">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="flex items-center gap-1.5">
+                <span class="w-2 h-2 rounded-full" style="background-color: #d97706;"></span>
+                <span class="text-xs font-semibold text-slate-800">軀幹前傾幅度 (Trunk Lean)</span>
+              </div>
+              <p class="text-[11px] text-slate-600 mt-0.5">肩–髖連線與垂直線夾角（建議適度前傾，過度前傾會增加能量消耗 <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC11135760/" target="_blank" rel="noopener noreferrer" class="text-amber-700 underline hover:text-amber-900">Carson et al., 2024</a>）</p>
+            </div>
+            <div class="text-right shrink-0">
+              <div id="metricTrunk" class="text-2xl font-bold text-slate-900 mono-num">8.0°</div>
+              <span id="statusTrunk" class="inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">理想前傾</span>
+            </div>
+          </div>
+          <!-- Mini range bar -->
+          <div class="mt-2.5 h-1.5 w-full bg-amber-100 rounded-full overflow-hidden relative">
+            <div class="absolute top-0 bottom-0 bg-emerald-400/50" style="left: 20%; width: 28%;"></div>
+            <div id="barTrunk" class="h-full bg-amber-600 rounded-full transition-all duration-75" style="width: 32%;"></div>
+          </div>
+        </div>
+
+        <!-- 4 Joint Angle Grid -->
+        <div class="grid grid-cols-2 gap-2.5">
+          <!-- Hip Angle -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div class="flex items-center gap-1.5 mb-1">
+              <span class="w-2 h-2 rounded-full" style="background-color: #2563eb;"></span>
+              <span class="text-xs font-medium text-slate-700">髖關節角度</span>
+            </div>
+            <div id="metricHip" class="text-xl font-bold text-slate-900 mono-num">162.4°</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">肩–髖–膝夾角</div>
+          </div>
+
+          <!-- Knee Flexion -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div class="flex items-center gap-1.5 mb-1">
+              <span class="w-2 h-2 rounded-full" style="background-color: #6d28d9;"></span>
+              <span class="text-xs font-medium text-slate-700">膝關節屈曲</span>
+            </div>
+            <div id="metricKnee" class="text-xl font-bold text-slate-900 mono-num">34.2°</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">0° 為完全伸直</div>
+          </div>
+
+          <!-- Elbow Angle -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div class="flex items-center gap-1.5 mb-1">
+              <span class="w-2 h-2 rounded-full" style="background-color: #0d9488;"></span>
+              <span class="text-xs font-medium text-slate-700">肘關節角度</span>
+            </div>
+            <div id="metricElbow" class="text-xl font-bold text-slate-900 mono-num">88.5°</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">建議擺臂 75°–100°</div>
+          </div>
+
+          <!-- Ankle / Shank Angle -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div class="flex items-center gap-1.5 mb-1">
+              <span class="w-2 h-2 rounded-full" style="background-color: #64748b;"></span>
+              <span class="text-xs font-medium text-slate-700">踝關節 / 小腿傾角</span>
+            </div>
+            <div id="metricAnkle" class="text-xl font-bold text-slate-900 mono-num">12.1°</div>
+            <div class="text-[11px] text-slate-500 mt-0.5">小腿相對垂直線</div>
+          </div>
+        </div>
+
+        <!-- Kinetics & Speed Row: Ground Contact Time & Running Speed -->
+        <div class="grid grid-cols-2 gap-2.5 mt-2.5 pt-2.5 border-t border-slate-100">
+          <!-- Ground Contact Time -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div class="flex items-center justify-between gap-1 mb-1">
+              <span class="text-xs font-medium text-slate-700">每步觸地時間</span>
+              <span id="contactStateBadge" class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">觸地中</span>
+            </div>
+            <div id="metricGct" class="text-xl font-bold text-slate-900 mono-num">232 ms</div>
+            <div id="metricGctAvg" class="text-[11px] text-slate-500 mt-0.5 mono-num">平均：232 ms</div>
+          </div>
+
+          <!-- Running Speed / Pace -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div class="flex items-center justify-between gap-1 mb-1">
+              <span class="text-xs font-medium text-slate-700">預估跑速</span>
+              <span id="metricSpeedMs" class="text-[10px] font-medium text-slate-500 mono-num">3.37 m/s</span>
+            </div>
+            <div id="metricSpeedKmh" class="text-xl font-bold text-slate-900 mono-num">12.1 km/h</div>
+            <div id="metricPace" class="text-[11px] text-slate-500 mt-0.5 mono-num">配速：4:57 /km</div>
+          </div>
+        </div>
+        </div><!-- End #panelBasicMetrics -->
+
+        <!-- Advanced Biomechanics Panel (進階數據) -->
+        <div id="panelAdvancedMetrics" class="hidden flex flex-col gap-3">
+          <!-- 0. Frontal / 3D Multi-Angle Assessment (骨盆下墜與膝內扣) -->
+          <div class="p-3 rounded-xl bg-indigo-50/60 border border-indigo-200/80">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs font-semibold text-slate-800">多視角篩檢：額狀面與 3D 評估</span>
+              <span id="badgeFrontalRisk" class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">力線穩定</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div class="bg-white rounded-lg p-2 border border-indigo-100">
+                <div class="text-[10px] text-slate-500">骨盆水平傾角</div>
+                <div id="advPelvicDrop" class="text-sm font-bold text-slate-900 mono-num">2.1°</div>
+              </div>
+              <div class="bg-white rounded-lg p-2 border border-indigo-100">
+                <div class="text-[10px] text-slate-500">動態膝內扣</div>
+                <div id="advKneeValgus" class="text-sm font-bold text-slate-900 mono-num">4.3°</div>
+              </div>
+              <div class="bg-white rounded-lg p-2 border border-indigo-100">
+                <div class="text-[10px] text-slate-500">步寬 / 肩傾角</div>
+                <div id="advStepWidth" class="text-sm font-bold text-slate-900 mono-num">8.5 cm</div>
+              </div>
+            </div>
+            <p id="frontalHintText" class="text-[10px] text-slate-600 mt-1.5">切換上方「背面/正面」或「斜角 3D」可即時偵測骨盆下墜與動態膝外翻</p>
+          </div>
+
+          <!-- 1. Bilateral Symmetry -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-xs font-semibold text-slate-800">左右側對稱性指數 (Asymmetry)</span>
+              <span id="badgeSymmetry" class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">對稱良好</span>
+            </div>
+            <div class="grid grid-cols-3 gap-2 text-center">
+              <div class="bg-white rounded-lg p-2 border border-slate-200/70">
+                <div class="text-[10px] text-slate-500">觸地時間差</div>
+                <div id="advSymGct" class="text-sm font-bold text-slate-900 mono-num">1.8%</div>
+              </div>
+              <div class="bg-white rounded-lg p-2 border border-slate-200/70">
+                <div class="text-[10px] text-slate-500">膝屈曲差</div>
+                <div id="advSymKnee" class="text-sm font-bold text-slate-900 mono-num">2.4%</div>
+              </div>
+              <div class="bg-white rounded-lg p-2 border border-slate-200/70">
+                <div class="text-[10px] text-slate-500">擺臂幅度差</div>
+                <div id="advSymArm" class="text-sm font-bold text-slate-900 mono-num">1.5%</div>
+              </div>
+            </div>
+            <p class="text-[10px] text-slate-500 mt-1.5">健康跑者時空差異 &lt; 5%、矢狀面角度 &lt; 10%；超過 10% 建議介入調整 (<a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC12078198/" target="_blank" rel="noopener noreferrer" class="text-slate-700 underline hover:text-slate-900">Vincent et al., 2025</a>)</p>
+          </div>
+
+          <!-- 2. Overstriding & Vertical Oscillation -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+              <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-xs font-medium text-slate-700">觸地過跨距離</span>
+                <span id="badgeOverstride" class="text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800">理想</span>
+              </div>
+              <div id="advOverstride" class="text-lg font-bold text-slate-900 mono-num">11.4 cm</div>
+              <div id="advIcShank" class="text-[11px] text-slate-500 mt-0.5 mono-num">著地小腿角：7.2°</div>
+              <div class="text-[10px] text-slate-400 mt-0.5"><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10942980/" target="_blank" rel="noopener noreferrer" class="underline hover:text-slate-700">Baker et al. (2024)</a> 煞車負荷指標</div>
+            </div>
+
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+              <div class="flex items-center justify-between gap-1 mb-1">
+                <span class="text-xs font-medium text-slate-700">垂直振幅 / 騰空</span>
+                <span id="advDutyFactor" class="text-[10px] font-medium text-slate-500 mono-num">工作比 34%</span>
+              </div>
+              <div id="advVertOsc" class="text-lg font-bold text-slate-900 mono-num">7.6 cm</div>
+              <div id="advFlightTime" class="text-[11px] text-slate-500 mt-0.5 mono-num">騰空時間：110 ms</div>
+              <div class="text-[10px] text-slate-400 mt-0.5"><a href="https://pubmed.ncbi.nlm.nih.gov/40197436/" target="_blank" rel="noopener noreferrer" class="underline hover:text-slate-700">Fiers (2025)</a> · <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC12440572/" target="_blank" rel="noopener noreferrer" class="underline hover:text-slate-700">Figueiredo (2025)</a></div>
+            </div>
+          </div>
+
+          <!-- 2.5 Foot Strike Pattern (足部著地型態) -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center justify-between gap-2">
+            <div>
+              <div class="text-xs font-semibold text-slate-800">足部著地型態 (Foot Strike)</div>
+              <div id="advFootStrikeAngle" class="text-[11px] text-slate-500 mono-num mt-0.5">著地足底角：3.2°</div>
+            </div>
+            <span id="advFootStrikeType" class="px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-100 text-emerald-800">中足著地 (Midfoot)</span>
+          </div>
+
+          <!-- 3. Hip Extension & Swing Knee Flexion -->
+          <div class="grid grid-cols-2 gap-2.5">
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+              <div class="text-xs font-medium text-slate-700 mb-0.5">離地最大髖伸展</div>
+              <div id="advMaxHipExt" class="text-lg font-bold text-slate-900 mono-num">17.8°</div>
+              <div class="text-[10px] text-slate-500">推蹬向後伸展角度</div>
+            </div>
+            <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+              <div class="text-xs font-medium text-slate-700 mb-0.5">擺盪最大膝折疊</div>
+              <div id="advMaxSwingKnee" class="text-lg font-bold text-slate-900 mono-num">96.4°</div>
+              <div class="text-[10px] text-slate-500">小腿後折效率指標</div>
+            </div>
+          </div>
+
+          <!-- 4. Key Phase Snapshots (IC / Mid-Stance / Toe-Off) -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <span class="text-xs font-semibold text-slate-800">關鍵步態瞬間自動定格</span>
+                <span class="text-[10px] text-slate-500 ml-1">（點擊快照可跳轉該幀）</span>
+              </div>
+              <button id="btnResetSnapshots" type="button" class="text-[11px] text-slate-600 hover:text-slate-900 underline">重新擷取</button>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <button id="snapCardIC" type="button" class="bg-white rounded-lg border border-slate-200 p-1.5 text-center hover:border-slate-400 hover:shadow-sm transition cursor-pointer">
+                <div class="text-[10px] font-semibold text-slate-700 mb-1">觸地瞬間 (IC)</div>
+                <img id="snapImgIC" alt="IC snapshot" class="w-full h-16 object-cover rounded bg-slate-900 hidden" />
+                <div id="snapPlaceholderIC" class="w-full h-16 rounded bg-slate-900 text-[10px] text-slate-400 flex items-center justify-center">等待偵測</div>
+                <div id="snapMetaIC" class="text-[10px] text-slate-600 mt-1 mono-num">--</div>
+              </button>
+              <button id="snapCardMS" type="button" class="bg-white rounded-lg border border-slate-200 p-1.5 text-center hover:border-slate-400 hover:shadow-sm transition cursor-pointer">
+                <div class="text-[10px] font-semibold text-slate-700 mb-1">站立中期 (MS)</div>
+                <img id="snapImgMS" alt="MS snapshot" class="w-full h-16 object-cover rounded bg-slate-900 hidden" />
+                <div id="snapPlaceholderMS" class="w-full h-16 rounded bg-slate-900 text-[10px] text-slate-400 flex items-center justify-center">等待偵測</div>
+                <div id="snapMetaMS" class="text-[10px] text-slate-600 mt-1 mono-num">--</div>
+              </button>
+              <button id="snapCardTO" type="button" class="bg-white rounded-lg border border-slate-200 p-1.5 text-center hover:border-slate-400 hover:shadow-sm transition cursor-pointer">
+                <div class="text-[10px] font-semibold text-slate-700 mb-1">推蹬離地 (TO)</div>
+                <img id="snapImgTO" alt="TO snapshot" class="w-full h-16 object-cover rounded bg-slate-900 hidden" />
+                <div id="snapPlaceholderTO" class="w-full h-16 rounded bg-slate-900 text-[10px] text-slate-400 flex items-center justify-center">等待偵測</div>
+                <div id="snapMetaTO" class="text-[10px] text-slate-600 mt-1 mono-num">--</div>
+              </button>
+            </div>
+          </div>
+
+          <!-- 5. Pre / Post Comparison -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div class="flex items-center justify-between gap-2 mb-2">
+              <span class="text-xs font-semibold text-slate-800">前後測客觀對比 (Pre / Post)</span>
+              <div class="flex items-center gap-1.5">
+                <button id="btnSavePre" type="button" class="px-2 py-1 text-[10px] font-medium rounded bg-white border border-slate-300 text-slate-700 hover:bg-slate-100 transition">存為前測</button>
+                <button id="btnSavePost" type="button" class="px-2 py-1 text-[10px] font-medium rounded bg-slate-900 text-white hover:bg-slate-800 transition">存為後測</button>
+              </div>
+            </div>
+            <div id="prePostTableWrap" class="text-[11px] text-slate-500">
+              尚未儲存前測／後測基準，請於跑動或影片播放時點擊上方按鈕記錄。
+            </div>
+          </div>
+
+          <!-- 6. Evidence-Based Literature Citations (2024–2025) -->
+          <div class="p-3 rounded-xl bg-slate-50 border border-slate-200/80">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-slate-800">實證文獻佐證 (2024–2025)</span>
+              <span class="text-[10px] text-slate-500">點擊可開啟 PubMed / PMC 原文</span>
+            </div>
+            <ol class="space-y-1.5 text-[10px] text-slate-600 list-decimal list-inside leading-relaxed">
+              <li>
+                <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC11135760/" target="_blank" rel="noopener noreferrer" class="font-medium text-slate-800 underline hover:text-amber-700">Carson et al. (2024), PLoS One</a> — 過度前傾會增加臀大肌／腿後肌負荷並使跑步經濟性下降 8%，建議維持直立至適度前傾。
+              </li>
+              <li>
+                <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10942980/" target="_blank" rel="noopener noreferrer" class="font-medium text-slate-800 underline hover:text-blue-700">Baker et al. (2024), Sci Rep</a> — 觸地瞬間大腿與小腿矢狀面角度可解釋 95%–98% 過跨變異與 80%–88% 最大煞車力，降低過跨有助減緩衝擊。
+              </li>
+              <li>
+                <a href="https://pubmed.ncbi.nlm.nih.gov/40197436/" target="_blank" rel="noopener noreferrer" class="font-medium text-slate-800 underline hover:text-purple-700">Fiers et al. (2025), Med Sci Sports Exerc</a> — 步態工作比 (Duty Factor，觸地／步態週期比例) 是調控下肢關節峰值負荷的主導因子。
+              </li>
+              <li>
+                <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC12440572/" target="_blank" rel="noopener noreferrer" class="font-medium text-slate-800 underline hover:text-teal-700">Figueiredo et al. (2025), Cureus</a> — 系統性回顧顯示適度提升步頻 5%–10% 可減少過跨、垂直振幅與地面反作用力，預防膝前痛與脛骨疲勞傷。
+              </li>
+              <li>
+                <a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC12078198/" target="_blank" rel="noopener noreferrer" class="font-medium text-slate-800 underline hover:text-emerald-700">Vincent et al. (2025), Front Sports Act Living</a> — 250 名無傷病史跑者常模：時空參數自然不對稱 &lt; 5%、矢狀面角度 &lt; 10%，逾 10% 建議動作再訓練。
+              </li>
+            </ol>
+          </div>
+        </div><!-- End #panelAdvancedMetrics -->
+      </div>
+
+      <!-- Angle Waveform Chart -->
+      <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex-1 flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+          <div>
+            <h2 class="text-sm font-semibold text-slate-900">關節角度時序曲線</h2>
+            <p class="text-[11px] text-slate-500">追蹤近期 60 幀之動態角度變化</p>
+          </div>
+          <button id="btnClearChart" class="text-[11px] text-slate-500 hover:text-slate-800 underline">清除紀錄</button>
+        </div>
+        <div class="relative h-56 w-full">
+          <canvas id="angleChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Biomechanical Summary / Min-Max Table -->
+      <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+        <h2 class="text-xs font-semibold text-slate-800 mb-2.5">週期極值統計 (Min / Max / Avg)</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs text-left">
+            <thead>
+              <tr class="border-b border-slate-200 text-slate-500">
+                <th class="py-1.5 font-medium">關節項目</th>
+                <th class="py-1.5 font-medium text-right">最小</th>
+                <th class="py-1.5 font-medium text-right">最大</th>
+                <th class="py-1.5 font-medium text-right">平均</th>
+              </tr>
+            </thead>
+            <tbody id="statsTableBody" class="divide-y divide-slate-100 mono-num text-slate-800">
+              <tr><td class="py-1.5">軀幹前傾</td><td class="py-1.5 text-right">-</td><td class="py-1.5 text-right">-</td><td class="py-1.5 text-right">-</td></tr>
+              <tr><td class="py-1.5">髖關節</td><td class="py-1.5 text-right">-</td><td class="py-1.5 text-right">-</td><td class="py-1.5 text-right">-</td></tr>
+              <tr><td class="py-1.5">膝關節屈曲</td><td class="py-1.5 text-right">-</td><td class="py-1.5 text-right">-</td><td class="py-1.5 text-right">-</td></tr>
+              <tr><td class="py-1.5">肘關節</td><td class="py-1.5 text-right">-</td><td class="py-1.5 text-right">-</td><td class="py-1.5 text-right">-</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Initialize Lucide icons
+    if (window.lucide) {
+      window.lucide.createIcons();
+    }
+
+    // --- State ---
+    const state = {
+      mode: 'sim', // 'sim' | 'upload'
+      isPlaying: true,
+      speed: 1.0,
+      phase: 0.0, // 0..1 gait cycle in sim mode
+      leanTarget: 8,
+      cadence: 176,
+      showAngles: true,
+      showVertical: true,
+      selectedSide: 'auto',
+      mediaType: null, // 'video' | 'image' | null
+      history: [], // { t, trunk, hip, knee, elbow, ankle }
+      maxHistory: 60,
+      lastTimestamp: performance.now(),
+      poseLandmarker: null,
+      poseLoading: false,
+      poseReady: false,
+      lastVideoTime: -1,
+      lastVideoLandmarks: null,
+      needsVideoDetect: false,
+      staticImageLandmarks: null,
+      visibleSegments: {
+        headNeck: true,
+        torso: true,
+        arm: true,
+        thigh: true,
+        shin: true,
+        ankleTrail: true
+      },
+      viewAngle: 'sagittal', // 'sagittal' | 'frontal' | 'oblique3d'
+      metronome: { enabled: false, timerId: null, audioCtx: null },
+      showRightSide: true,
+      showLeftSide: true,
+      ankleTrailRight: [],
+      ankleTrailLeft: [],
+      maxAnkleTrail: 120,
+      heightCm: 170,
+      envMode: 'auto', // 'auto' | 'overground' | 'treadmill'
+      gct: {
+        inContact: false,
+        contactStartTime: null,
+        lastMs: null,
+        samples: [],
+        maxAnkleY: 0,
+        minAnkleY: 99999
+      },
+      speedEst: {
+        prevTime: null,
+        prevHipX: null,
+        prevAnkleX: null,
+        smoothedMs: 0
+      },
+      camera: {
+        stream: null,
+        active: false,
+        facingMode: 'environment', // 'environment' (後置) | 'user' (前置)
+        mediaRecorder: null,
+        isRecording: false,
+        chunks: [],
+        recordedBlob: null,
+        recordStartMs: 0,
+        lastDetectTime: -1,
+        lastLandmarks: null
+      },
+      adv: {
+        rightGctSamples: [],
+        leftGctSamples: [],
+        rightKneeMax: 0,
+        leftKneeMax: 0,
+        rightArmRange: { min: 180, max: 0 },
+        leftArmRange: { min: 180, max: 0 },
+        hipYWindow: [],
+        lastHipPeakTime: null,
+        maxHipExt: 0,
+        maxSwingKnee: 0,
+        overstrideCm: 0,
+        icShankDeg: 0,
+        vertOscCm: 0,
+        flightTimeMs: 0,
+        dutyFactorPct: 0,
+        symmetry: { gctPct: 0, kneePct: 0, armPct: 0 },
+        leftInContact: false,
+        leftContactStart: null,
+        snapshots: { IC: false, MS: false, TO: false },
+        snapshotTimes: { IC: null, MS: null, TO: null },
+        pelvicDropDeg: 2.1,
+        kneeValgusDeg: 4.3,
+        stepWidthCm: 8.5,
+        shoulderTiltDeg: 1.5,
+        footStrikeAngle: 2.5,
+        footStrikeType: '中足著地',
+        preRecord: null,
+        postRecord: null
+      },
+      smoothingLevel: 'med', // 'off' | 'low' | 'med' | 'high'
+      smoothedLandmarks: null,
+      smoothedWorldLandmarks: null,
+      biofeedback: true,
+      protractor: {
+        active: false,
+        points: [], // current in-progress 1..3 points
+        shapes: []  // completed triangles [{a, b, c, angle}]
+      },
+      dual: {
+        hasA: false,
+        hasB: false,
+        lastTimeA: -1,
+        lastTimeB: -1,
+        landmarksA: null,
+        landmarksB: null,
+        metricsA: null,
+        metricsB: null
+      },
+      athletes: [],
+      activeAthleteId: 'default'
+    };
+
+    // Restrained, distinct segment colors (no glow/flash)
+    const SEGMENT_COLORS = {
+      headNeck: '#94a3b8', // Muted slate
+      torso: '#d97706',    // Muted amber
+      arm: '#0d9488',      // Muted teal
+      thigh: '#2563eb',    // Muted cobalt blue
+      shin: '#6d28d9'      // Muted indigo-violet
+    };
+
+    // DOM Elements
+    const canvas = document.getElementById('gaitCanvas');
+    const ctx = canvas.getContext('2d');
+    const videoEl = document.getElementById('sourceVideo');
+    const cameraVideoEl = document.getElementById('cameraVideo');
+    const imgEl = document.getElementById('sourceImage');
+    const timelineSlider = document.getElementById('timelineSlider');
+    const timeLabel = document.getElementById('timeLabel');
+    const phaseBadge = document.getElementById('phaseBadge');
+    const aiStatusBadge = document.getElementById('aiStatusBadge');
+    const uploadPromptOverlay = document.getElementById('uploadPromptOverlay');
+    const cameraPromptOverlay = document.getElementById('cameraPromptOverlay');
+
+    // Toast helper
+    function showToast(msg) {
+      const box = document.getElementById('toastBox');
+      box.textContent = msg;
+      box.classList.remove('hidden');
+      clearTimeout(box._timer);
+      box._timer = setTimeout(() => box.classList.add('hidden'), 3200);
+    }
+
+    // Resize canvas cleanly
+    function resizeCanvas() {
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.max(640, Math.floor(rect.width * dpr));
+      canvas.height = Math.max(400, Math.floor(rect.height * dpr));
+      state.ankleTrailRight = [];
+      state.ankleTrailLeft = [];
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // --- Geometry & Angle Math ---
+    function deg(rad) {
+      return rad * (180 / Math.PI);
+    }
+
+    // Angle at vertex B formed by A-B-C (0..180 deg)
+    function angleBetween3Points(A, B, C) {
+      const v1x = A.x - B.x;
+      const v1y = A.y - B.y;
+      const v2x = C.x - B.x;
+      const v2y = C.y - B.y;
+      const dot = v1x * v2x + v1y * v2y;
+      const m1 = Math.hypot(v1x, v1y);
+      const m2 = Math.hypot(v2x, v2y);
+      if (m1 < 1e-6 || m2 < 1e-6) return 0;
+      const cosVal = Math.max(-1, Math.min(1, dot / (m1 * m2)));
+      return deg(Math.acos(cosVal));
+    }
+
+    // Angle of segment (from bottom to top) relative to vertical upward vector (0, -1)
+    function angleFromVertical(bottom, top, facingDir = 1) {
+      const dx = (top.x - bottom.x) * facingDir;
+      const dy = bottom.y - top.y; // positive when top is above bottom
+      if (Math.hypot(dx, dy) < 1e-6) return 0;
+      return deg(Math.atan2(dx, dy));
+    }
+
+    // --- Chart.js Setup ---
+    const chartCtx = document.getElementById('angleChart').getContext('2d');
+    const angleChart = new Chart(chartCtx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: '軀幹前傾',
+            data: [],
+            borderColor: '#d97706',
+            backgroundColor: 'rgba(217, 119, 6, 0.08)',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.25
+          },
+          {
+            label: '膝屈曲',
+            data: [],
+            borderColor: '#6d28d9',
+            borderWidth: 2,
+            pointRadius: 0,
+            tension: 0.25
+          },
+          {
+            label: '髖關節',
+            data: [],
+            borderColor: '#2563eb',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.25
+          },
+          {
+            label: '肘關節',
+            data: [],
+            borderColor: '#0d9488',
+            borderWidth: 1.5,
+            pointRadius: 0,
+            tension: 0.25
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: {
+            position: 'top',
+            labels: { boxWidth: 10, font: { size: 11 } }
+          }
+        },
+        scales: {
+          x: { display: false },
+          y: {
+            min: 0,
+            max: 190,
+            ticks: { font: { size: 10 }, stepSize: 45 },
+            grid: { color: '#f1f5f9' }
+          }
+        }
+      }
+    });
+
+    // --- Biomechanical Running Gait Simulator ---
+    // Generates realistic 2D sagittal-plane keypoints (normalized 0..1) for a runner facing right
+    function computeSimulatedPose(phase, leanDeg, cadence) {
+      const w = canvas.width;
+      const h = canvas.height;
+      const scale = Math.min(w, h) * 0.65;
+      const groundY = h * 0.84;
+      const cx = w * 0.48;
+      const t = phase * Math.PI * 2;
+
+      if (state.viewAngle === 'frontal') {
+        // Rear / Frontal view simulation (Pelvic drop, knee valgus, step width)
+        const bounce = -Math.abs(Math.sin(t)) * (scale * 0.04);
+        const hipMidY = groundY - scale * 0.50 + bounce;
+        const hipHalfW = scale * 0.085;
+        const shoulderHalfW = scale * 0.135;
+        const dropRad = Math.sin(t) * (0.04 + (leanDeg / 22) * 0.05); // pelvic tilt oscillates per step
+
+        const rHip = { x: cx + hipHalfW, y: hipMidY - Math.sin(dropRad) * hipHalfW };
+        const lHip = { x: cx - hipHalfW, y: hipMidY + Math.sin(dropRad) * hipHalfW };
+        const rShoulder = { x: cx + shoulderHalfW, y: hipMidY - scale * 0.30 + Math.sin(dropRad) * 8 };
+        const lShoulder = { x: cx - shoulderHalfW, y: hipMidY - scale * 0.30 - Math.sin(dropRad) * 8 };
+        const head = { x: cx, y: hipMidY - scale * 0.43 };
+
+        const rLift = Math.max(0, -Math.sin(t)) * scale * 0.12;
+        const lLift = Math.max(0, Math.sin(t)) * scale * 0.12;
+        const valgusOffset = (leanDeg > 12 ? 14 : 7);
+
+        const rKnee = { x: rHip.x - (rLift === 0 ? valgusOffset : 2), y: rHip.y + scale * 0.24 - rLift * 0.45 };
+        const rAnkle = { x: rHip.x - 4, y: groundY - scale * 0.03 - rLift };
+
+        const lKnee = { x: lHip.x + (lLift === 0 ? valgusOffset : 2), y: lHip.y + scale * 0.24 - lLift * 0.45 };
+        const lAnkle = { x: lHip.x + 4, y: groundY - scale * 0.03 - lLift };
+
+        const rElbow = { x: rShoulder.x + scale * 0.05, y: rShoulder.y + scale * 0.14 + Math.cos(t) * 14 };
+        const rWrist = { x: rElbow.x - scale * 0.03, y: rElbow.y + scale * 0.09 };
+        const lElbow = { x: lShoulder.x - scale * 0.05, y: lShoulder.y + scale * 0.14 - Math.cos(t) * 14 };
+        const lWrist = { x: lElbow.x + scale * 0.03, y: lElbow.y + scale * 0.09 };
+
+        const rightSide = { head, shoulder: rShoulder, elbow: rElbow, wrist: rWrist, hip: rHip, knee: rKnee, ankle: rAnkle };
+        const leftSide = { head, shoulder: lShoulder, elbow: lElbow, wrist: lWrist, hip: lHip, knee: lKnee, ankle: lAnkle };
+
+        return {
+          primary: rightSide,
+          right: rightSide,
+          left: leftSide,
+          groundY,
+          facingDir: 1,
+          phaseName: '額狀面評估（背面/正面視角）'
+        };
+      }
+      const leanRad = (leanDeg * Math.PI) / 180;
+
+      // Vertical COM oscillation (two bounces per full gait cycle)
+      const bounce = -Math.abs(Math.sin(t)) * (scale * 0.045);
+      const hipY = groundY - scale * 0.50 + bounce;
+      const hipX = cx;
+
+      // Torso length
+      const torsoLen = scale * 0.30;
+      const shoulder = {
+        x: hipX + Math.sin(leanRad) * torsoLen,
+        y: hipY - Math.cos(leanRad) * torsoLen
+      };
+
+      // Head
+      const neckLen = scale * 0.13;
+      const head = {
+        x: shoulder.x + Math.sin(leanRad * 0.7) * neckLen,
+        y: shoulder.y - Math.cos(leanRad * 0.7) * neckLen
+      };
+
+      // Leg kinematics (primary right/near side)
+      const thighLen = scale * 0.24;
+      const shinLen = scale * 0.24;
+
+      // Thigh angle relative to vertical downward (positive = forward)
+      // At phase=0 (Initial Contact), thigh is forward (~28 deg), then sweeps back to ~-24 deg at Toe-Off, then swings forward
+      const cadenceFactor = (cadence - 170) * 0.002;
+      const hipSwingAmp = 0.48 + cadenceFactor;
+      const thighAngle = Math.cos(t) * hipSwingAmp + 0.06;
+
+      const knee = {
+        x: hipX + Math.sin(thighAngle) * thighLen,
+        y: hipY + Math.cos(thighAngle) * thighLen
+      };
+
+      // Knee flexion: small at contact (~18 deg), increases in mid-stance (~40 deg), peaks in swing (~102 deg)
+      // Knee angle relative to thigh continuation (positive = bent backward)
+      const kneeFlex = 0.25 + 0.75 * Math.pow(Math.max(0, -Math.sin(t - 0.5)), 1.3) * 1.45 + 0.30 * Math.pow(Math.max(0, Math.sin(t + 0.8)), 2);
+      const shinAngle = thighAngle - kneeFlex;
+
+      let ankle = {
+        x: knee.x + Math.sin(shinAngle) * shinLen,
+        y: knee.y + Math.cos(shinAngle) * shinLen
+      };
+      // Clamp ankle above ground
+      if (ankle.y > groundY - scale * 0.03) {
+        ankle.y = groundY - scale * 0.03;
+      }
+      // Foot (heel & toe) for foot-strike angle simulation
+      const footLen = scale * 0.11;
+      const footPitch = (leanDeg < 4 ? 0.20 : (cadence >= 188 ? -0.10 : 0.05)) - Math.sin(t) * 0.18;
+      const heel = { x: ankle.x - footLen * 0.25, y: ankle.y + scale * 0.02 };
+      const toe = { x: ankle.x + Math.cos(footPitch) * footLen, y: heel.y - Math.sin(footPitch) * footLen };
+
+      // Opposite leg (180 deg out of phase) for subtle context
+      const tOpp = t + Math.PI;
+      const oppThighAngle = Math.cos(tOpp) * hipSwingAmp + 0.06;
+      const oppKnee = {
+        x: hipX + Math.sin(oppThighAngle) * thighLen,
+        y: hipY + Math.cos(oppThighAngle) * thighLen
+      };
+      const oppKneeFlex = 0.25 + 0.75 * Math.pow(Math.max(0, -Math.sin(tOpp - 0.5)), 1.3) * 1.45 + 0.30 * Math.pow(Math.max(0, Math.sin(tOpp + 0.8)), 2);
+      const oppShinAngle = oppThighAngle - oppKneeFlex;
+      let oppAnkle = {
+        x: oppKnee.x + Math.sin(oppShinAngle) * shinLen,
+        y: oppKnee.y + Math.cos(oppShinAngle) * shinLen
+      };
+      if (oppAnkle.y > groundY - scale * 0.03) {
+        oppAnkle.y = groundY - scale * 0.03;
+      }
+
+      // Arm swing (counter-phase to same-side leg)
+      const upperArmLen = scale * 0.16;
+      const forearmLen = scale * 0.15;
+      const armSwing = -Math.cos(t) * 0.52 - 0.08;
+      const elbow = {
+        x: shoulder.x + Math.sin(armSwing) * upperArmLen,
+        y: shoulder.y + Math.cos(armSwing) * upperArmLen
+      };
+      const elbowBend = 1.55 + Math.sin(t) * 0.15;
+      const forearmAngle = armSwing + elbowBend;
+      const wrist = {
+        x: elbow.x + Math.sin(forearmAngle) * forearmLen,
+        y: elbow.y + Math.cos(forearmAngle) * forearmLen
+      };
+
+      // Opposite (Left) arm swing
+      const oppArmSwing = -Math.cos(tOpp) * 0.52 - 0.08;
+      const oppElbow = {
+        x: shoulder.x + Math.sin(oppArmSwing) * upperArmLen,
+        y: shoulder.y + Math.cos(oppArmSwing) * upperArmLen
+      };
+      const oppElbowBend = 1.55 + Math.sin(tOpp) * 0.15;
+      const oppForearmAngle = oppArmSwing + oppElbowBend;
+      const oppWrist = {
+        x: oppElbow.x + Math.sin(oppForearmAngle) * forearmLen,
+        y: oppElbow.y + Math.cos(oppForearmAngle) * forearmLen
+      };
+
+      // Phase name
+      let phaseName = '站立中期 (Mid-Stance)';
+      if (phase < 0.15 || phase >= 0.90) phaseName = '觸地期 (Initial Contact)';
+      else if (phase < 0.32) phaseName = '站立支撐 (Mid-Stance)';
+      else if (phase < 0.48) phaseName = '推蹬離地 (Toe-Off)';
+      else if (phase < 0.72) phaseName = '折疊擺動 (Mid-Swing)';
+      else phaseName = '前擺準備 (Terminal Swing)';
+
+      const rightSide = {
+        head,
+        shoulder,
+        elbow,
+        wrist,
+        hip: { x: hipX, y: hipY },
+        knee,
+        ankle,
+        heel,
+        toe
+      };
+      const leftSide = {
+        head,
+        shoulder,
+        elbow: oppElbow,
+        wrist: oppWrist,
+        hip: { x: hipX, y: hipY },
+        knee: oppKnee,
+        ankle: oppAnkle
+      };
+
+      return {
+        primary: rightSide,
+        right: rightSide,
+        left: leftSide,
+        groundY,
+        facingDir: 1,
+        phaseName
+      };
+    }
+
+    // --- Drawing Exoskeleton (Plain White Dots + Distinct Muted Lines, NO Glow) ---
+    function drawSegment(p1, p2, color, width = 4, alpha = 1, dashed = false) {
+      if (!p1 || !p2) return;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.lineWidth = width;
+      ctx.lineCap = 'round';
+      if (dashed) {
+        ctx.setLineDash([7, 5]);
+      }
+      ctx.beginPath();
+      ctx.moveTo(p1.x, p1.y);
+      ctx.lineTo(p2.x, p2.y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Plain white dot with crisp 1.5px dark border (zero glow/shadow)
+    function drawPlainWhiteJoint(pt, radius = 5.5, label = '') {
+      if (!pt) return;
+      ctx.save();
+      ctx.fillStyle = '#FFFFFF';
+      ctx.strokeStyle = '#0F172A';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(pt.x, pt.y, radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      if (label) {
+        ctx.font = '500 11px Inter, "Noto Sans TC", sans-serif';
+        ctx.fillStyle = 'rgba(248, 250, 252, 0.85)';
+        ctx.fillText(label, pt.x + radius + 5, pt.y + 4);
+      }
+      ctx.restore();
+    }
+
+    function drawAngleArcAndText(center, p1, p2, text, color) {
+      if (!center || !p1 || !p2) return;
+      const a1 = Math.atan2(p1.y - center.y, p1.x - center.x);
+      const a2 = Math.atan2(p2.y - center.y, p2.x - center.x);
+      let diff = a2 - a1;
+      while (diff > Math.PI) diff -= Math.PI * 2;
+      while (diff < -Math.PI) diff += Math.PI * 2;
+
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(center.x, center.y, 20, a1, a1 + diff, diff < 0);
+      ctx.stroke();
+
+      const midAngle = a1 + diff / 2;
+      const tx = center.x + Math.cos(midAngle) * 32;
+      const ty = center.y + Math.sin(midAngle) * 32;
+      ctx.font = '600 11px Inter, sans-serif';
+      const pad = 4;
+      const tw = ctx.measureText(text).width;
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+      ctx.fillRect(tx - tw / 2 - pad, ty - 9, tw + pad * 2, 16);
+      ctx.fillStyle = '#F8FAFC';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, tx, ty - 1);
+      ctx.restore();
+    }
+
+    function drawBackgroundGrid(groundY) {
+      ctx.save();
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Subtle lab grid
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.08)';
+      ctx.lineWidth = 1;
+      const step = 40;
+      for (let x = 0; x < canvas.width; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      // Ground plane
+      if (groundY) {
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, groundY);
+        ctx.lineTo(canvas.width, groundY);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawTrail(points, dashed) {
+      if (!points || points.length < 2) return;
+      ctx.save();
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      ctx.globalAlpha = dashed ? 0.55 : 0.75;
+      if (dashed) ctx.setLineDash([6, 4]);
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      for (let i = 1; i < points.length; i++) {
+        ctx.lineTo(points[i].x, points[i].y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function drawSideSkeleton(side, isLeft) {
+      if (!side) return;
+      const dashed = isLeft;
+      const alpha = isLeft ? 0.85 : 1.0;
+      if (state.visibleSegments.headNeck) drawSegment(side.head, side.shoulder, SEGMENT_COLORS.headNeck, 3.8, alpha, dashed);
+      if (state.visibleSegments.torso) drawSegment(side.shoulder, side.hip, SEGMENT_COLORS.torso, 4.2, alpha, dashed);
+      if (state.visibleSegments.arm) {
+        drawSegment(side.shoulder, side.elbow, SEGMENT_COLORS.arm, 3.8, alpha, dashed);
+        if (side.wrist) drawSegment(side.elbow, side.wrist, SEGMENT_COLORS.arm, 3.2, alpha, dashed);
+      }
+      if (state.visibleSegments.thigh) drawSegment(side.hip, side.knee, SEGMENT_COLORS.thigh, 4.2, alpha, dashed);
+      if (state.visibleSegments.shin) drawSegment(side.knee, side.ankle, SEGMENT_COLORS.shin, 4.2, alpha, dashed);
+    }
+
+    function renderPoseAndComputeMetrics(pose, recordHistory = true) {
+      const { primary, right, left, facingDir } = pose;
+      const { head, shoulder, elbow, wrist, hip, knee, ankle } = primary;
+
+      // 1. Alignment & Reference Guides
+      if (state.showVertical) {
+        ctx.save();
+        ctx.setLineDash([5, 5]);
+        ctx.strokeStyle = 'rgba(226, 232, 240, 0.45)';
+        ctx.lineWidth = 1.5;
+        if (state.viewAngle === 'frontal' && left && right) {
+          // Horizontal pelvic level & vertical midline
+          const midHipX = (left.hip.x + right.hip.x) / 2;
+          const midHipY = (left.hip.y + right.hip.y) / 2;
+          ctx.beginPath();
+          ctx.moveTo(midHipX, midHipY - 120);
+          ctx.lineTo(midHipX, midHipY + 140);
+          ctx.stroke();
+          // Pelvic line
+          ctx.setLineDash([]);
+          ctx.strokeStyle = '#fbbf24';
+          ctx.lineWidth = 2.5;
+          ctx.beginPath();
+          ctx.moveTo(left.hip.x, left.hip.y);
+          ctx.lineTo(right.hip.x, right.hip.y);
+          ctx.stroke();
+        } else if (hip && shoulder) {
+          ctx.beginPath();
+          ctx.moveTo(hip.x, hip.y + 15);
+          ctx.lineTo(hip.x, shoulder.y - 30);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      // 2. Record & Draw Left / Right Ankle Trajectories
+      if (recordHistory) {
+        if (right && right.ankle) {
+          state.ankleTrailRight.push({ x: right.ankle.x, y: right.ankle.y });
+          if (state.ankleTrailRight.length > state.maxAnkleTrail) state.ankleTrailRight.shift();
+        }
+        if (left && left.ankle) {
+          state.ankleTrailLeft.push({ x: left.ankle.x, y: left.ankle.y });
+          if (state.ankleTrailLeft.length > state.maxAnkleTrail) state.ankleTrailLeft.shift();
+        }
+      }
+      if (state.visibleSegments.ankleTrail) {
+        if (state.showLeftSide) drawTrail(state.ankleTrailLeft, true);
+        if (state.showRightSide) drawTrail(state.ankleTrailRight, false);
+      }
+
+      // 3. Draw Left (Dashed) then Right (Solid) Exoskeleton Lines
+      if (state.showLeftSide && left) drawSideSkeleton(left, true);
+      if (state.showRightSide && right) drawSideSkeleton(right, false);
+
+      // 4. Compute Angles (Use 3D worldLandmarks when in oblique3d mode & available)
+      const use3D = state.viewAngle === 'oblique3d' && pose.world3D;
+      const trunkLean = use3D
+        ? Math.abs(deg(Math.atan2(
+            Math.hypot(pose.world3D.shoulder.x - pose.world3D.hip.x, pose.world3D.shoulder.z - pose.world3D.hip.z),
+            pose.world3D.hip.y - pose.world3D.shoulder.y
+          )))
+        : angleFromVertical(hip, shoulder, facingDir);
+      const hipAngle = use3D
+        ? angle3D(pose.world3D.shoulder, pose.world3D.hip, pose.world3D.knee)
+        : angleBetween3Points(shoulder, hip, knee);
+      const kneeInternal = use3D
+        ? angle3D(pose.world3D.hip, pose.world3D.knee, pose.world3D.ankle)
+        : angleBetween3Points(hip, knee, ankle);
+      const kneeFlexion = Math.max(0, 180 - kneeInternal);
+      const elbowAngle = use3D && pose.world3D.wrist
+        ? angle3D(pose.world3D.shoulder, pose.world3D.elbow, pose.world3D.wrist)
+        : (wrist ? angleBetween3Points(shoulder, elbow, wrist) : 90);
+      const ankleShankAngle = Math.abs(angleFromVertical(ankle, knee, facingDir));
+
+      // Compute Frontal Plane Metrics (Pelvic Drop, Knee Valgus, Step Width)
+      if (left && right) {
+        const pelvicDx = Math.abs(right.hip.x - left.hip.x);
+        const pelvicDy = Math.abs(right.hip.y - left.hip.y);
+        state.adv.pelvicDropDeg = pelvicDx > 5 ? deg(Math.atan2(pelvicDy, pelvicDx)) : 0;
+
+        const shDx = Math.abs(right.shoulder.x - left.shoulder.x);
+        const shDy = Math.abs(right.shoulder.y - left.shoulder.y);
+        state.adv.shoulderTiltDeg = shDx > 5 ? deg(Math.atan2(shDy, shDx)) : 0;
+
+        const rValgus = Math.max(0, 180 - angleBetween3Points(right.hip, right.knee, right.ankle));
+        const lValgus = Math.max(0, 180 - angleBetween3Points(left.hip, left.knee, left.ankle));
+        state.adv.kneeValgusDeg = state.viewAngle === 'frontal' ? Math.max(rValgus, lValgus) : state.adv.kneeValgusDeg;
+
+        const torsoPx = Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y);
+        const pxPerCm = torsoPx / (state.heightCm * 0.288);
+        if (state.viewAngle === 'frontal' && pxPerCm > 0.3) {
+          state.adv.stepWidthCm = Math.abs(right.ankle.x - left.ankle.x) / pxPerCm;
+        }
+      }
+
+      // 5. Draw Angle Arcs
+      if (state.showAngles) {
+        const verticalTop = { x: hip.x, y: hip.y - 80 };
+        drawAngleArcAndText(hip, verticalTop, shoulder, `${trunkLean.toFixed(1)}°`, '#fbbf24');
+        drawAngleArcAndText(knee, hip, ankle, `${kneeFlexion.toFixed(0)}°`, '#c4b5fd');
+        if (wrist) {
+          drawAngleArcAndText(elbow, shoulder, wrist, `${elbowAngle.toFixed(0)}°`, '#5eead4');
+        }
+      }
+
+      // 6. Draw Plain White Joint Dots for Visible Sides (頭、肩、肘、髖、膝、踝)
+      drawPlainWhiteJoint(head, 6, '頭');
+      if (state.showLeftSide && left) {
+        drawPlainWhiteJoint(left.shoulder, 5, '');
+        drawPlainWhiteJoint(left.elbow, 4.5, '');
+        drawPlainWhiteJoint(left.hip, 5, '');
+        drawPlainWhiteJoint(left.knee, 5, '');
+        drawPlainWhiteJoint(left.ankle, 5, '');
+      }
+      if (state.showRightSide && right) {
+        drawPlainWhiteJoint(right.shoulder, 5.5, '肩');
+        drawPlainWhiteJoint(right.elbow, 5, '肘');
+        drawPlainWhiteJoint(right.hip, 6, '髖');
+        drawPlainWhiteJoint(right.knee, 5.5, '膝');
+        drawPlainWhiteJoint(right.ankle, 5.5, '踝');
+      }
+
+      // 7. Compute GCT, Speed & Advanced Biomechanics
+      let kinetics = null;
+      if (state.mode === 'sim') {
+        const cycleMs = (120 / state.cadence) * 1000;
+        const stanceRatio = Math.max(0.28, Math.min(0.40, 0.38 - (state.cadence - 150) * 0.0014));
+        const gctMs = cycleMs * stanceRatio;
+        const inContact = state.phase <= stanceRatio;
+        const stepLengthM = 1.05 + ((state.cadence - 145) / 60) * 0.35 + (state.leanTarget / 22) * 0.08;
+        const speedMs = (state.cadence / 60) * stepLengthM;
+        kinetics = { inContact, gctMs, avgGctMs: gctMs, speedMs };
+
+        // Advanced metrics in simulator
+        const torsoPx = Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y);
+        const pxPerCm = torsoPx / (state.heightCm * 0.288);
+        if (state.phase < 0.06 || state.phase > 0.94) {
+          state.adv.overstrideCm = Math.max(2, ((ankle.x - hip.x) * facingDir) / Math.max(0.5, pxPerCm));
+          state.adv.icShankDeg = Math.abs(angleFromVertical(ankle, knee, facingDir));
+        }
+        state.adv.vertOscCm = Math.max(4.5, 10.5 - (state.cadence - 145) * 0.065);
+        state.adv.flightTimeMs = Math.max(40, (cycleMs / 2) - gctMs);
+        state.adv.dutyFactorPct = (gctMs / cycleMs) * 100;
+        // Simulated healthy slight asymmetry (~1.2% - 2.4%)
+        state.adv.symmetry = { gctPct: 1.6, kneePct: 2.1, armPct: 1.4 };
+        // Track hip extension & swing knee flexion
+        const thighFromVert = angleFromVertical(knee, hip, facingDir); // positive when knee is behind hip
+        if (thighFromVert > 0) state.adv.maxHipExt = Math.max(state.adv.maxHipExt, thighFromVert);
+        state.adv.maxSwingKnee = Math.max(state.adv.maxSwingKnee, kneeFlexion);
+      } else if (state.mode === 'upload' && state.mediaType === 'video' && recordHistory) {
+        kinetics = updateVideoKinetics(primary, videoEl.currentTime, left, right, facingDir);
+      } else if (state.mode === 'camera' && state.camera.active && recordHistory) {
+        kinetics = updateVideoKinetics(primary, performance.now() / 1000, left, right, facingDir);
+      }
+
+      // Foot Strike Pattern detection (heel vs midfoot vs forefoot)
+      if (primary.heel && primary.toe) {
+        const fdx = (primary.toe.x - primary.heel.x) * facingDir;
+        const fdy = primary.heel.y - primary.toe.y; // positive = toe higher than heel (rearfoot strike)
+        const fAngle = deg(Math.atan2(fdy, Math.max(1, fdx)));
+        if (kinetics && kinetics.inContact) {
+          state.adv.footStrikeAngle = fAngle;
+          if (fAngle > 5) state.adv.footStrikeType = '腳跟著地 (Rearfoot)';
+          else if (fAngle >= -3) state.adv.footStrikeType = '中足著地 (Midfoot)';
+          else state.adv.footStrikeType = '前足著地 (Forefoot)';
+        }
+        // Subtle foot line
+        if (state.visibleSegments.shin) {
+          drawSegment(primary.heel, primary.toe, '#94a3b8', 2.5, 0.7);
+        }
+      }
+
+      // Draw Manual Protractor Shapes
+      drawProtractorOverlays();
+
+      // Biofeedback Alerts
+      updateBiofeedbackAlert();
+
+      // Auto-capture key phase snapshots (IC, MS, TO) after drawing skeleton
+      if (recordHistory) {
+        maybeCaptureSnapshots(pose, kinetics, trunkLean, kneeFlexion);
+      }
+
+      // 8. Update UI Metrics & Chart
+      updateMetricsUI({
+        trunk: trunkLean,
+        hip: hipAngle,
+        knee: kneeFlexion,
+        elbow: elbowAngle,
+        ankle: ankleShankAngle,
+        kinetics
+      }, pose.phaseName, recordHistory);
+    }
+
+    function maybeCaptureSnapshots(pose, kinetics, trunkLean, kneeFlexion) {
+      if (!kinetics) return;
+      const snaps = state.adv.snapshots;
+      const phaseText = pose.phaseName || '';
+
+      const capture = (key, imgId, phId, metaId, label) => {
+        try {
+          const dataUrl = canvas.toDataURL('image/jpeg', 0.72);
+          const img = document.getElementById(imgId);
+          const ph = document.getElementById(phId);
+          const meta = document.getElementById(metaId);
+          img.src = dataUrl;
+          img.classList.remove('hidden');
+          ph.classList.add('hidden');
+          meta.textContent = label;
+          snaps[key] = true;
+          state.adv.snapshotTimes[key] = state.mode === 'sim'
+            ? { mode: 'sim', phase: state.phase }
+            : (state.mode === 'upload' && state.mediaType === 'video' ? { mode: 'video', time: videoEl.currentTime } : null);
+        } catch (_) {}
+      };
+
+      if (!snaps.IC && (phaseText.includes('觸地') || (kinetics.inContact && state.mode !== 'sim'))) {
+        capture('IC', 'snapImgIC', 'snapPlaceholderIC', 'snapMetaIC', `前傾 ${trunkLean.toFixed(1)}° | 膝 ${kneeFlexion.toFixed(0)}°`);
+      } else if (!snaps.MS && snaps.IC && (phaseText.includes('支撐') || (kinetics.inContact && kneeFlexion > 25))) {
+        capture('MS', 'snapImgMS', 'snapPlaceholderMS', 'snapMetaMS', `前傾 ${trunkLean.toFixed(1)}° | 膝 ${kneeFlexion.toFixed(0)}°`);
+      } else if (!snaps.TO && snaps.MS && (phaseText.includes('離地') || !kinetics.inContact)) {
+        capture('TO', 'snapImgTO', 'snapPlaceholderTO', 'snapMetaTO', `前傾 ${trunkLean.toFixed(1)}° | 膝 ${kneeFlexion.toFixed(0)}°`);
+      }
+    }
+
+    function calcPctDiff(a, b) {
+      if (!a || !b || (a + b) < 1e-3) return 0;
+      return (Math.abs(a - b) / ((a + b) / 2)) * 100;
+    }
+
+    function updateVideoKinetics(primary, currentTime, leftSide, rightSide, facingDir = 1) {
+      const { shoulder, hip, ankle } = primary;
+      if (!shoulder || !hip || !ankle) return null;
+
+      // Track ankle vertical range to identify ground contact near lowest point
+      state.gct.maxAnkleY = Math.max(state.gct.maxAnkleY, ankle.y);
+      state.gct.minAnkleY = Math.min(state.gct.minAnkleY, ankle.y);
+      const ySpan = Math.max(20, state.gct.maxAnkleY - state.gct.minAnkleY);
+      const contactThresholdY = state.gct.maxAnkleY - ySpan * 0.16;
+      const nowContact = ankle.y >= contactThresholdY;
+
+      if (nowContact && !state.gct.inContact) {
+        state.gct.inContact = true;
+        state.gct.contactStartTime = currentTime;
+      } else if (!nowContact && state.gct.inContact) {
+        state.gct.inContact = false;
+        if (state.gct.contactStartTime !== null && currentTime > state.gct.contactStartTime) {
+          const durMs = (currentTime - state.gct.contactStartTime) * 1000;
+          if (durMs >= 80 && durMs <= 700) {
+            state.gct.lastMs = durMs;
+            state.gct.samples.push(durMs);
+            if (state.gct.samples.length > 10) state.gct.samples.shift();
+          }
+        }
+      }
+
+      // Calibrate pixels -> meters using torso length (~0.288 * height)
+      const torsoPx = Math.hypot(shoulder.x - hip.x, shoulder.y - hip.y);
+      const torsoM = (state.heightCm / 100) * 0.288;
+      const pxPerMeter = torsoPx > 10 ? torsoPx / torsoM : 150;
+
+      if (state.speedEst.prevTime !== null && currentTime > state.speedEst.prevTime) {
+        const dt = currentTime - state.speedEst.prevTime;
+        if (dt > 0.005 && dt < 0.5) {
+          const hipSpeedMs = Math.abs(hip.x - state.speedEst.prevHipX) / pxPerMeter / dt;
+          const ankleSpeedMs = Math.abs(ankle.x - state.speedEst.prevAnkleX) / pxPerMeter / dt;
+
+          let rawSpeed = 0;
+          if (state.envMode === 'overground') {
+            rawSpeed = hipSpeedMs;
+          } else if (state.envMode === 'treadmill') {
+            rawSpeed = nowContact ? ankleSpeedMs : state.speedEst.smoothedMs;
+          } else {
+            // Auto: if hip moves significantly, use hip; otherwise during stance use ankle belt speed
+            rawSpeed = hipSpeedMs > 0.8 ? hipSpeedMs : (nowContact ? ankleSpeedMs : state.speedEst.smoothedMs);
+          }
+
+          if (rawSpeed > 0.2 && rawSpeed < 12) {
+            state.speedEst.smoothedMs = state.speedEst.smoothedMs === 0
+              ? rawSpeed
+              : state.speedEst.smoothedMs * 0.82 + rawSpeed * 0.18;
+          }
+        }
+      }
+      state.speedEst.prevTime = currentTime;
+      state.speedEst.prevHipX = hip.x;
+      state.speedEst.prevAnkleX = ankle.x;
+
+      const avgGct = state.gct.samples.length > 0
+        ? state.gct.samples.reduce((a, b) => a + b, 0) / state.gct.samples.length
+        : null;
+
+      // Advanced biomechanics from video
+      const pxPerCm = pxPerMeter / 100;
+      state.adv.hipYWindow.push(hip.y);
+      if (state.adv.hipYWindow.length > 45) state.adv.hipYWindow.shift();
+      if (state.adv.hipYWindow.length > 10) {
+        const yDiff = Math.max(...state.adv.hipYWindow) - Math.min(...state.adv.hipYWindow);
+        state.adv.vertOscCm = Math.min(20, yDiff / Math.max(0.5, pxPerCm));
+      }
+
+      if (nowContact && state.gct.contactStartTime === currentTime) {
+        state.adv.overstrideCm = Math.max(0, ((ankle.x - hip.x) * facingDir) / Math.max(0.5, pxPerCm));
+        state.adv.icShankDeg = Math.abs(angleFromVertical(ankle, primary.knee, facingDir));
+      }
+
+      const thighBack = angleFromVertical(primary.knee, hip, facingDir);
+      if (thighBack > 0 && thighBack < 45) {
+        state.adv.maxHipExt = Math.max(state.adv.maxHipExt, thighBack);
+      }
+      const primKneeFlex = 180 - angleBetween3Points(hip, primary.knee, ankle);
+      state.adv.maxSwingKnee = Math.max(state.adv.maxSwingKnee, primKneeFlex);
+
+      // Bilateral symmetry tracking
+      if (leftSide && rightSide) {
+        const rk = 180 - angleBetween3Points(rightSide.hip, rightSide.knee, rightSide.ankle);
+        const lk = 180 - angleBetween3Points(leftSide.hip, leftSide.knee, leftSide.ankle);
+        state.adv.rightKneeMax = Math.max(state.adv.rightKneeMax, rk);
+        state.adv.leftKneeMax = Math.max(state.adv.leftKneeMax, lk);
+
+        if (rightSide.wrist) {
+          const ra = angleBetween3Points(rightSide.shoulder, rightSide.elbow, rightSide.wrist);
+          state.adv.rightArmRange.min = Math.min(state.adv.rightArmRange.min, ra);
+          state.adv.rightArmRange.max = Math.max(state.adv.rightArmRange.max, ra);
+        }
+        if (leftSide.wrist) {
+          const la = angleBetween3Points(leftSide.shoulder, leftSide.elbow, leftSide.wrist);
+          state.adv.leftArmRange.min = Math.min(state.adv.leftArmRange.min, la);
+          state.adv.leftArmRange.max = Math.max(state.adv.leftArmRange.max, la);
+        }
+
+        const rSpan = Math.max(1, state.adv.rightArmRange.max - state.adv.rightArmRange.min);
+        const lSpan = Math.max(1, state.adv.leftArmRange.max - state.adv.leftArmRange.min);
+        state.adv.symmetry = {
+          gctPct: state.gct.samples.length >= 2 ? calcPctDiff(avgGct, state.gct.lastMs) : 0,
+          kneePct: calcPctDiff(state.adv.rightKneeMax, state.adv.leftKneeMax),
+          armPct: calcPctDiff(rSpan, lSpan)
+        };
+      }
+
+      if (avgGct) {
+        const estStepMs = 340; // fallback step period
+        state.adv.flightTimeMs = Math.max(20, estStepMs - avgGct);
+        state.adv.dutyFactorPct = Math.min(60, (avgGct / (estStepMs * 2)) * 100);
+      }
+
+      return {
+        inContact: state.gct.inContact,
+        gctMs: state.gct.lastMs,
+        avgGctMs: avgGct,
+        speedMs: state.speedEst.smoothedMs
+      };
+    }
+
+    function formatPace(speedMs) {
+      if (!speedMs || speedMs <= 0.1) return '--:-- /km';
+      const secPerKm = 1000 / speedMs;
+      const mins = Math.floor(secPerKm / 60);
+      const secs = Math.round(secPerKm % 60);
+      if (mins > 30) return '--:-- /km';
+      return `${mins}:${secs.toString().padStart(2, '0')} /km`;
+    }
+
+    function updateMetricsUI(metrics, phaseName, recordHistory = true) {
+      if (phaseName) {
+        phaseBadge.textContent = `步態週期：${phaseName}`;
+      }
+
+      document.getElementById('metricTrunk').textContent = `${metrics.trunk.toFixed(1)}°`;
+      document.getElementById('metricHip').textContent = `${metrics.hip.toFixed(1)}°`;
+      document.getElementById('metricKnee').textContent = `${metrics.knee.toFixed(1)}°`;
+      document.getElementById('metricElbow').textContent = `${metrics.elbow.toFixed(1)}°`;
+      document.getElementById('metricAnkle').textContent = `${metrics.ankle.toFixed(1)}°`;
+
+      if (metrics.kinetics) {
+        const k = metrics.kinetics;
+        const badge = document.getElementById('contactStateBadge');
+        if (k.inContact) {
+          badge.textContent = '觸地中';
+          badge.className = 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800';
+        } else {
+          badge.textContent = '騰空/擺動';
+          badge.className = 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-700';
+        }
+        document.getElementById('metricGct').textContent = k.gctMs ? `${Math.round(k.gctMs)} ms` : '偵測中...';
+        document.getElementById('metricGctAvg').textContent = k.avgGctMs ? `平均：${Math.round(k.avgGctMs)} ms` : '平均：-- ms';
+
+        const kmh = k.speedMs * 3.6;
+        document.getElementById('metricSpeedMs').textContent = k.speedMs > 0.1 ? `${k.speedMs.toFixed(2)} m/s` : '-- m/s';
+        document.getElementById('metricSpeedKmh').textContent = k.speedMs > 0.1 ? `${kmh.toFixed(1)} km/h` : '-- km/h';
+        document.getElementById('metricPace').textContent = `配速：${formatPace(k.speedMs)}`;
+
+        // Update Advanced Panel
+        document.getElementById('advSymGct').textContent = `${state.adv.symmetry.gctPct.toFixed(1)}%`;
+        document.getElementById('advSymKnee').textContent = `${state.adv.symmetry.kneePct.toFixed(1)}%`;
+        document.getElementById('advSymArm').textContent = `${state.adv.symmetry.armPct.toFixed(1)}%`;
+        const maxSym = Math.max(state.adv.symmetry.gctPct, state.adv.symmetry.kneePct, state.adv.symmetry.armPct);
+        const symBadge = document.getElementById('badgeSymmetry');
+        if (maxSym < 5) {
+          symBadge.textContent = '對稱良好';
+          symBadge.className = 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800';
+        } else if (maxSym <= 10) {
+          symBadge.textContent = '輕微差異';
+          symBadge.className = 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-amber-100 text-amber-800';
+        } else {
+          symBadge.textContent = '代償警訊';
+          symBadge.className = 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-100 text-rose-800';
+        }
+
+        document.getElementById('advOverstride').textContent = `${state.adv.overstrideCm.toFixed(1)} cm`;
+        document.getElementById('advIcShank').textContent = `著地小腿角：${state.adv.icShankDeg.toFixed(1)}°`;
+        const osBadge = document.getElementById('badgeOverstride');
+        if (state.adv.overstrideCm <= 15) {
+          osBadge.textContent = '理想';
+          osBadge.className = 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800';
+        } else {
+          osBadge.textContent = '偏大過跨';
+          osBadge.className = 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-100 text-rose-800';
+        }
+
+        document.getElementById('advVertOsc').textContent = `${state.adv.vertOscCm.toFixed(1)} cm`;
+        document.getElementById('advFlightTime').textContent = `騰空時間：${Math.round(state.adv.flightTimeMs)} ms`;
+        document.getElementById('advDutyFactor').textContent = `工作比 ${Math.round(state.adv.dutyFactorPct)}%`;
+        document.getElementById('advMaxHipExt').textContent = `${state.adv.maxHipExt.toFixed(1)}°`;
+        document.getElementById('advMaxSwingKnee').textContent = `${state.adv.maxSwingKnee.toFixed(1)}°`;
+        document.getElementById('advFootStrikeAngle').textContent = `著地足底角：${state.adv.footStrikeAngle.toFixed(1)}°`;
+        const fsBadge = document.getElementById('advFootStrikeType');
+        fsBadge.textContent = state.adv.footStrikeType;
+        if (state.adv.footStrikeType.includes('腳跟')) {
+          fsBadge.className = 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-amber-100 text-amber-800';
+        } else {
+          fsBadge.className = 'px-2.5 py-1 rounded-lg text-xs font-semibold bg-emerald-100 text-emerald-800';
+        }
+
+        document.getElementById('advPelvicDrop').textContent = `${state.adv.pelvicDropDeg.toFixed(1)}°`;
+        document.getElementById('advKneeValgus').textContent = `${state.adv.kneeValgusDeg.toFixed(1)}°`;
+        document.getElementById('advStepWidth').textContent = `${state.adv.stepWidthCm.toFixed(1)} cm`;
+        const fBadge = document.getElementById('badgeFrontalRisk');
+        if (state.adv.pelvicDropDeg > 5 || state.adv.kneeValgusDeg > 10) {
+          fBadge.textContent = '力線偏移警示';
+          fBadge.className = 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-100 text-rose-800';
+        } else {
+          fBadge.textContent = '力線穩定';
+          fBadge.className = 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800';
+        }
+      } else if (state.mode === 'upload' && state.mediaType === 'image') {
+        document.getElementById('contactStateBadge').textContent = '靜態圖片';
+        document.getElementById('contactStateBadge').className = 'text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-200 text-slate-700';
+        document.getElementById('metricGct').textContent = '-- ms';
+        document.getElementById('metricGctAvg').textContent = '需影片序列';
+        document.getElementById('metricSpeedKmh').textContent = '-- km/h';
+        document.getElementById('metricSpeedMs').textContent = '-- m/s';
+        document.getElementById('metricPace').textContent = '配速：--:-- /km';
+      }
+
+      // Trunk status badge & bar
+      const statusTrunk = document.getElementById('statusTrunk');
+      const barTrunk = document.getElementById('barTrunk');
+      const pct = Math.max(0, Math.min(100, (metrics.trunk / 25) * 100));
+      barTrunk.style.width = `${pct}%`;
+
+      if (metrics.trunk < 4) {
+        statusTrunk.textContent = '前傾偏小';
+        statusTrunk.className = 'inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-sky-100 text-sky-800';
+      } else if (metrics.trunk <= 13) {
+        statusTrunk.textContent = '理想前傾';
+        statusTrunk.className = 'inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-800';
+      } else {
+        statusTrunk.textContent = '前傾過大';
+        statusTrunk.className = 'inline-block text-[10px] font-medium px-1.5 py-0.5 rounded bg-rose-100 text-rose-800';
+      }
+
+      // Record history only on new frames (prevents chart scrolling/jitter when paused)
+      if (recordHistory || state.history.length === 0) {
+        state.history.push({
+          t: state.history.length + 1,
+          ...metrics
+        });
+        if (state.history.length > state.maxHistory) {
+          state.history.shift();
+        }
+
+        // Update Chart
+        angleChart.data.labels = state.history.map((_, i) => i + 1);
+        angleChart.data.datasets[0].data = state.history.map(d => d.trunk.toFixed(1));
+        angleChart.data.datasets[1].data = state.history.map(d => d.knee.toFixed(1));
+        angleChart.data.datasets[2].data = state.history.map(d => d.hip.toFixed(1));
+        angleChart.data.datasets[3].data = state.history.map(d => d.elbow.toFixed(1));
+        angleChart.update('none');
+
+        // Update Stats Table
+        updateStatsTable();
+      }
+    }
+
+    function updateStatsTable() {
+      if (state.history.length === 0) return;
+      const keys = [
+        { key: 'trunk', label: '軀幹前傾' },
+        { key: 'hip', label: '髖關節' },
+        { key: 'knee', label: '膝關節屈曲' },
+        { key: 'elbow', label: '肘關節' }
+      ];
+      const tbody = document.getElementById('statsTableBody');
+      tbody.innerHTML = keys.map(item => {
+        const vals = state.history.map(h => h[item.key]);
+        const min = Math.min(...vals).toFixed(1);
+        const max = Math.max(...vals).toFixed(1);
+        const avg = (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1);
+        return `
+          <tr>
+            <td class="py-1.5 font-sans text-slate-700">${item.label}</td>
+            <td class="py-1.5 text-right">${min}°</td>
+            <td class="py-1.5 text-right">${max}°</td>
+            <td class="py-1.5 text-right font-semibold">${avg}°</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // --- MediaPipe Pose Landmarker (Dynamic Lazy Load for Upload Mode) ---
+    async function initMediaPipe() {
+      if (state.poseReady || state.poseLoading) return;
+      state.poseLoading = true;
+      aiStatusBadge.textContent = '載入 AI 骨骼模型中...';
+      aiStatusBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-sky-100 text-sky-800';
+      try {
+        const vision = await import('https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs');
+        const filesetResolver = await vision.FilesetResolver.forVisionTasks(
+          'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm'
+        );
+        state.poseLandmarker = await vision.PoseLandmarker.createFromOptions(filesetResolver, {
+          baseOptions: {
+            modelAssetPath: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task',
+            delegate: 'GPU'
+          },
+          runningMode: 'VIDEO',
+          numPoses: 1
+        });
+        state.poseReady = true;
+        aiStatusBadge.textContent = 'AI 模型已就緒';
+        aiStatusBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-emerald-100 text-emerald-800';
+      } catch (err) {
+        console.warn('MediaPipe load failed:', err);
+        aiStatusBadge.textContent = 'AI 模型載入失敗 (請檢查網路)';
+        aiStatusBadge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-rose-100 text-rose-800';
+        showToast('無法連線載入 MediaPipe AI 模型，請先使用模擬跑者模式');
+      } finally {
+        state.poseLoading = false;
+      }
+    }
+
+    function angle3D(A, B, C) {
+      if (!A || !B || !C) return 0;
+      const v1x = A.x - B.x, v1y = A.y - B.y, v1z = (A.z || 0) - (B.z || 0);
+      const v2x = C.x - B.x, v2y = C.y - B.y, v2z = (C.z || 0) - (B.z || 0);
+      const dot = v1x * v2x + v1y * v2y + v1z * v2z;
+      const m1 = Math.hypot(v1x, v1y, v1z);
+      const m2 = Math.hypot(v2x, v2y, v2z);
+      if (m1 < 1e-6 || m2 < 1e-6) return 0;
+      return deg(Math.acos(Math.max(-1, Math.min(1, dot / (m1 * m2)))));
+    }
+
+    function getSmoothingAlpha() {
+      if (state.smoothingLevel === 'low') return 0.65;
+      if (state.smoothingLevel === 'med') return 0.40;
+      if (state.smoothingLevel === 'high') return 0.22;
+      return 1.0;
+    }
+
+    function applyLandmarkSmoothing(rawList, prevList) {
+      const alpha = getSmoothingAlpha();
+      if (alpha >= 0.99 || !prevList || prevList.length !== rawList.length) {
+        return rawList.map(lm => ({ ...lm }));
+      }
+      return rawList.map((lm, i) => ({
+        x: prevList[i].x * (1 - alpha) + lm.x * alpha,
+        y: prevList[i].y * (1 - alpha) + lm.y * alpha,
+        z: (prevList[i].z || 0) * (1 - alpha) + (lm.z || 0) * alpha,
+        visibility: lm.visibility
+      }));
+    }
+
+    function extractMediaPipePose(landmarks, drawW, drawH, offsetX, offsetY, worldLandmarks = null) {
+      // MediaPipe landmark indices:
+      // 0: nose (head), 11/12: L/R shoulder, 13/14: L/R elbow, 15/16: L/R wrist
+      // 23/24: L/R hip, 25/26: L/R knee, 27/28: L/R ankle
+      const toPx = (lm) => ({
+        x: offsetX + lm.x * drawW,
+        y: offsetY + lm.y * drawH,
+        v: lm.visibility ?? 1
+      });
+
+      let useRight = true;
+      if (state.selectedSide === 'left') useRight = false;
+      else if (state.selectedSide === 'right') useRight = true;
+      else {
+        const visL = (landmarks[11].visibility || 0) + (landmarks[23].visibility || 0) + (landmarks[25].visibility || 0);
+        const visR = (landmarks[12].visibility || 0) + (landmarks[24].visibility || 0) + (landmarks[26].visibility || 0);
+        useRight = visR >= visL;
+      }
+
+      const nose = toPx(landmarks[0]);
+      const rightSide = {
+        head: nose,
+        shoulder: toPx(landmarks[12]),
+        elbow: toPx(landmarks[14]),
+        wrist: toPx(landmarks[16]),
+        hip: toPx(landmarks[24]),
+        knee: toPx(landmarks[26]),
+        ankle: toPx(landmarks[28]),
+        heel: landmarks[30] ? toPx(landmarks[30]) : null,
+        toe: landmarks[32] ? toPx(landmarks[32]) : null
+      };
+      const leftSide = {
+        head: nose,
+        shoulder: toPx(landmarks[11]),
+        elbow: toPx(landmarks[13]),
+        wrist: toPx(landmarks[15]),
+        hip: toPx(landmarks[23]),
+        knee: toPx(landmarks[25]),
+        ankle: toPx(landmarks[27]),
+        heel: landmarks[29] ? toPx(landmarks[29]) : null,
+        toe: landmarks[31] ? toPx(landmarks[31]) : null
+      };
+      const primary = useRight ? rightSide : leftSide;
+      const facingDir = nose.x >= primary.shoulder.x ? 1 : -1;
+
+      let world3D = null;
+      if (worldLandmarks && worldLandmarks.length >= 29) {
+        const wIdx = useRight
+          ? { shoulder: 12, elbow: 14, wrist: 16, hip: 24, knee: 26, ankle: 28 }
+          : { shoulder: 11, elbow: 13, wrist: 15, hip: 23, knee: 25, ankle: 27 };
+        world3D = {
+          shoulder: worldLandmarks[wIdx.shoulder],
+          elbow: worldLandmarks[wIdx.elbow],
+          wrist: worldLandmarks[wIdx.wrist],
+          hip: worldLandmarks[wIdx.hip],
+          knee: worldLandmarks[wIdx.knee],
+          ankle: worldLandmarks[wIdx.ankle],
+          lHip: worldLandmarks[23],
+          rHip: worldLandmarks[24],
+          lShoulder: worldLandmarks[11],
+          rShoulder: worldLandmarks[12]
+        };
+      }
+
+      return {
+        primary,
+        right: rightSide,
+        left: leftSide,
+        world3D,
+        facingDir,
+        phaseName: state.viewAngle === 'frontal'
+          ? '額狀面評估（背面/正面）'
+          : (state.viewAngle === 'oblique3d' ? '斜角 3D 空間校正' : (useRight ? '雙側偵測（主分析：右側）' : '雙側偵測（主分析：左側）'))
+      };
+    }
+
+    // --- Main Animation Loop ---
+    function loop(now) {
+      const dt = Math.min(0.05, (now - state.lastTimestamp) / 1000);
+      state.lastTimestamp = now;
+
+      if (state.mode === 'sim') {
+        if (state.isPlaying) {
+          // 1 full gait cycle = 2 steps. Frequency = (cadence / 2) / 60 Hz
+          const cycleHz = (state.cadence / 120) * state.speed;
+          state.phase = (state.phase + dt * cycleHz) % 1;
+          timelineSlider.value = (state.phase * 100).toFixed(1);
+          timeLabel.textContent = `${Math.round(state.phase * 100)}%`;
+        }
+        const pose = computeSimulatedPose(state.phase, state.leanTarget, state.cadence);
+        drawBackgroundGrid(pose.groundY);
+        renderPoseAndComputeMetrics(pose, state.isPlaying);
+      } else if (state.mode === 'upload') {
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (state.mediaType === 'video' && videoEl.readyState >= 2) {
+          const vw = videoEl.videoWidth || 640;
+          const vh = videoEl.videoHeight || 360;
+          const scale = Math.min(canvas.width / vw, canvas.height / vh);
+          const drawW = vw * scale;
+          const drawH = vh * scale;
+          const ox = (canvas.width - drawW) / 2;
+          const oy = (canvas.height - drawH) / 2;
+          ctx.drawImage(videoEl, ox, oy, drawW, drawH);
+
+          if (videoEl.duration) {
+            const pct = (videoEl.currentTime / videoEl.duration) * 100;
+            timelineSlider.value = pct.toFixed(1);
+            timeLabel.textContent = `${videoEl.currentTime.toFixed(1)}s`;
+          }
+
+          const isNewFrame = Math.abs(videoEl.currentTime - state.lastVideoTime) > 1e-4 || state.needsVideoDetect;
+          if (state.poseReady && state.poseLandmarker && isNewFrame && !videoEl.seeking) {
+            try {
+              const res = state.poseLandmarker.detectForVideo(videoEl, performance.now());
+              if (res.landmarks && res.landmarks.length > 0) {
+                state.smoothedLandmarks = applyLandmarkSmoothing(res.landmarks[0], state.smoothedLandmarks);
+                state.lastVideoLandmarks = state.smoothedLandmarks;
+                if (res.worldLandmarks && res.worldLandmarks[0]) {
+                  state.smoothedWorldLandmarks = applyLandmarkSmoothing(res.worldLandmarks[0], state.smoothedWorldLandmarks);
+                  state.lastVideoWorldLandmarks = state.smoothedWorldLandmarks;
+                } else {
+                  state.lastVideoWorldLandmarks = null;
+                }
+                state.lastVideoTime = videoEl.currentTime;
+                state.needsVideoDetect = false;
+              }
+            } catch (_) {}
+          }
+          if (state.lastVideoLandmarks) {
+            const pose = extractMediaPipePose(state.lastVideoLandmarks, drawW, drawH, ox, oy, state.lastVideoWorldLandmarks);
+            renderPoseAndComputeMetrics(pose, isNewFrame);
+          }
+        } else if (state.mediaType === 'image' && imgEl.complete && imgEl.naturalWidth > 0) {
+          const iw = imgEl.naturalWidth;
+          const ih = imgEl.naturalHeight;
+          const scale = Math.min(canvas.width / iw, canvas.height / ih);
+          const drawW = iw * scale;
+          const drawH = ih * scale;
+          const ox = (canvas.width - drawW) / 2;
+          const oy = (canvas.height - drawH) / 2;
+          ctx.drawImage(imgEl, ox, oy, drawW, drawH);
+
+          if (state.staticImageLandmarks) {
+            const pose = extractMediaPipePose(state.staticImageLandmarks, drawW, drawH, ox, oy);
+            renderPoseAndComputeMetrics(pose, state.history.length === 0);
+          }
+        }
+      } else if (state.mode === 'camera') {
+        ctx.fillStyle = '#0f172a';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (state.camera.active && cameraVideoEl.readyState >= 2) {
+          const vw = cameraVideoEl.videoWidth || 640;
+          const vh = cameraVideoEl.videoHeight || 480;
+          const scale = Math.min(canvas.width / vw, canvas.height / vh);
+          const drawW = vw * scale;
+          const drawH = vh * scale;
+          const ox = (canvas.width - drawW) / 2;
+          const oy = (canvas.height - drawH) / 2;
+
+          // Mirror horizontally only for front ('user') camera
+          const mirror = state.camera.facingMode === 'user';
+          ctx.save();
+          if (mirror) {
+            ctx.translate(canvas.width, 0);
+            ctx.scale(-1, 1);
+          }
+          ctx.drawImage(cameraVideoEl, ox, oy, drawW, drawH);
+          ctx.restore();
+
+          if (state.poseReady && state.poseLandmarker) {
+            try {
+              const res = state.poseLandmarker.detectForVideo(cameraVideoEl, performance.now());
+              if (res.landmarks && res.landmarks.length > 0) {
+                const rawLms = mirror
+                  ? res.landmarks[0].map(lm => ({ ...lm, x: 1 - lm.x }))
+                  : res.landmarks[0];
+                state.smoothedLandmarks = applyLandmarkSmoothing(rawLms, state.smoothedLandmarks);
+                state.camera.lastLandmarks = state.smoothedLandmarks;
+                let wLms = res.worldLandmarks ? res.worldLandmarks[0] : null;
+                if (wLms) {
+                  state.smoothedWorldLandmarks = applyLandmarkSmoothing(wLms, state.smoothedWorldLandmarks);
+                  wLms = state.smoothedWorldLandmarks;
+                }
+                const pose = extractMediaPipePose(state.smoothedLandmarks, drawW, drawH, ox, oy, wLms);
+                renderPoseAndComputeMetrics(pose, true);
+              }
+            } catch (_) {}
+          }
+
+          if (state.camera.isRecording) {
+            const sec = Math.floor((performance.now() - state.camera.recordStartMs) / 1000);
+            const mm = String(Math.floor(sec / 60)).padStart(2, '0');
+            const ss = String(sec % 60).padStart(2, '0');
+            document.getElementById('recordTimerBadge').textContent = `${mm}:${ss}`;
+          }
+        }
+      } else if (state.mode === 'dual') {
+        renderDualVideoFrame('A', document.getElementById('dualVideoA'), document.getElementById('dualCanvasA'), document.getElementById('dualMetricA'));
+        renderDualVideoFrame('B', document.getElementById('dualVideoB'), document.getElementById('dualCanvasB'), document.getElementById('dualMetricB'));
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    // --- Event Listeners ---
+    let wakeLockSentinel = null;
+    async function requestWakeLock() {
+      try {
+        if ('wakeLock' in navigator && !wakeLockSentinel) {
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+        }
+      } catch (_) {}
+    }
+    function releaseWakeLock() {
+      try {
+        if (wakeLockSentinel) {
+          wakeLockSentinel.release();
+          wakeLockSentinel = null;
+        }
+      } catch (_) {}
+    }
+
+    async function stopCameraStream() {
+      releaseWakeLock();
+      if (state.camera.isRecording) {
+        stopRecording();
+      }
+      if (state.camera.stream) {
+        state.camera.stream.getTracks().forEach(t => t.stop());
+        state.camera.stream = null;
+      }
+      cameraVideoEl.srcObject = null;
+      state.camera.active = false;
+      document.getElementById('labelToggleCamera').textContent = '開啟鏡頭';
+      document.getElementById('btnRecordVideo').disabled = true;
+      if (state.mode === 'camera') {
+        cameraPromptOverlay.classList.remove('hidden');
+      }
+    }
+
+    async function startCameraStream() {
+      await initMediaPipe();
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showToast('此瀏覽器或預覽環境不支援相機存取');
+        return;
+      }
+      try {
+        if (state.camera.stream) {
+          state.camera.stream.getTracks().forEach(t => t.stop());
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: state.camera.facingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          },
+          audio: false
+        });
+        state.camera.stream = stream;
+        cameraVideoEl.srcObject = stream;
+        await cameraVideoEl.play();
+        state.camera.active = true;
+        state.ankleTrailRight = [];
+      state.ankleTrailLeft = [];
+        state.history = [];
+        state.gct = { inContact: false, contactStartTime: null, lastMs: null, samples: [], maxAnkleY: 0, minAnkleY: 99999 };
+        state.speedEst = { prevTime: null, prevHipX: null, prevAnkleX: null, smoothedMs: 0 };
+        requestWakeLock();
+        cameraPromptOverlay.classList.add('hidden');
+        document.getElementById('labelToggleCamera').textContent = '關閉鏡頭';
+        document.getElementById('btnRecordVideo').disabled = false;
+        showToast(state.camera.facingMode === 'user' ? '已切換至前置鏡頭並開始對點' : '已切換至後置鏡頭並開始對點');
+      } catch (err) {
+        console.warn('Camera error:', err);
+        showToast('無法開啟相機（請確認已允許相機權限或裝置具備鏡頭）');
+      }
+    }
+
+    function startRecording() {
+      if (!state.camera.active) return;
+      try {
+        const canvasStream = canvas.captureStream(30);
+        const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
+          ? 'video/webm;codecs=vp9'
+          : (MediaRecorder.isTypeSupported('video/webm') ? 'video/webm' : '');
+        const recorder = mime ? new MediaRecorder(canvasStream, { mimeType: mime }) : new MediaRecorder(canvasStream);
+        state.camera.chunks = [];
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) state.camera.chunks.push(e.data);
+        };
+        recorder.onstop = () => {
+          state.camera.recordedBlob = new Blob(state.camera.chunks, { type: mime || 'video/webm' });
+          document.getElementById('recordedActions').classList.remove('hidden');
+          showToast('錄影完成！可下載影片或點「逐幀分析」檢視');
+        };
+        recorder.start(200);
+        state.camera.mediaRecorder = recorder;
+        state.camera.isRecording = true;
+        state.camera.recordStartMs = performance.now();
+        document.getElementById('labelRecordVideo').textContent = '停止錄影';
+        document.getElementById('recordTimerBadge').classList.remove('hidden');
+        document.getElementById('recordTimerBadge').textContent = '00:00';
+        document.getElementById('recordedActions').classList.add('hidden');
+      } catch (err) {
+        showToast('此瀏覽器不支援畫面錄影功能');
+      }
+    }
+
+    function stopRecording() {
+      if (state.camera.mediaRecorder && state.camera.isRecording) {
+        state.camera.mediaRecorder.stop();
+      }
+      state.camera.isRecording = false;
+      document.getElementById('labelRecordVideo').textContent = '開始錄影';
+      document.getElementById('recordTimerBadge').classList.add('hidden');
+    }
+
+    function setMode(newMode) {
+      if (state.mode === 'camera' && newMode !== 'camera') {
+        stopCameraStream();
+      }
+      state.mode = newMode;
+      state.ankleTrailRight = [];
+      state.ankleTrailLeft = [];
+      const btnSim = document.getElementById('btnModeSim');
+      const btnUp = document.getElementById('btnModeUpload');
+      const btnCam = document.getElementById('btnModeCamera');
+      const btnDual = document.getElementById('btnModeDual');
+      const simPanel = document.getElementById('simControlsPanel');
+      const upPanel = document.getElementById('uploadControlsPanel');
+      const camPanel = document.getElementById('cameraControlsPanel');
+      const dualContainer = document.getElementById('dualVideoContainer');
+      const btnChangeMedia = document.getElementById('btnChangeMedia');
+
+      const activeCls = 'flex-1 sm:flex-none px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md bg-white text-slate-900 shadow-sm transition';
+      const idleCls = 'flex-1 sm:flex-none px-2 sm:px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 transition';
+      btnSim.className = newMode === 'sim' ? activeCls : idleCls;
+      btnUp.className = newMode === 'upload' ? activeCls : idleCls;
+      btnCam.className = newMode === 'camera' ? activeCls : idleCls;
+      btnDual.className = newMode === 'dual' ? activeCls : idleCls;
+
+      simPanel.classList.toggle('hidden', newMode !== 'sim');
+      upPanel.classList.toggle('hidden', newMode === 'sim' || newMode === 'dual');
+      camPanel.classList.toggle('hidden', newMode !== 'camera');
+      dualContainer.classList.toggle('hidden', newMode !== 'dual');
+
+      if (newMode === 'sim') {
+        uploadPromptOverlay.classList.add('hidden');
+        cameraPromptOverlay.classList.add('hidden');
+        aiStatusBadge.classList.add('hidden');
+        btnChangeMedia.classList.add('hidden');
+        videoEl.pause();
+      } else if (newMode === 'upload') {
+        cameraPromptOverlay.classList.add('hidden');
+        aiStatusBadge.classList.remove('hidden');
+        if (!state.mediaType) {
+          uploadPromptOverlay.classList.remove('hidden');
+        } else {
+          uploadPromptOverlay.classList.add('hidden');
+          btnChangeMedia.classList.remove('hidden');
+        }
+        initMediaPipe();
+      } else if (newMode === 'dual') {
+        uploadPromptOverlay.classList.add('hidden');
+        cameraPromptOverlay.classList.add('hidden');
+        btnChangeMedia.classList.add('hidden');
+        aiStatusBadge.classList.remove('hidden');
+        videoEl.pause();
+        initMediaPipe();
+      } else if (newMode === 'camera') {
+        uploadPromptOverlay.classList.add('hidden');
+        btnChangeMedia.classList.add('hidden');
+        aiStatusBadge.classList.remove('hidden');
+        videoEl.pause();
+        if (!state.camera.active) {
+          cameraPromptOverlay.classList.remove('hidden');
+        }
+        initMediaPipe();
+      }
+    }
+
+    document.getElementById('btnModeSim').addEventListener('click', () => setMode('sim'));
+    document.getElementById('btnModeUpload').addEventListener('click', () => setMode('upload'));
+    document.getElementById('btnModeCamera').addEventListener('click', () => setMode('camera'));
+    document.getElementById('btnModeDual').addEventListener('click', () => setMode('dual'));
+
+    document.getElementById('btnStartCameraOverlay').addEventListener('click', startCameraStream);
+    document.getElementById('btnToggleCamera').addEventListener('click', () => {
+      if (state.camera.active) stopCameraStream();
+      else startCameraStream();
+    });
+    document.getElementById('btnSwitchCamera').addEventListener('click', () => {
+      state.camera.facingMode = state.camera.facingMode === 'environment' ? 'user' : 'environment';
+      document.getElementById('labelCameraFacing').textContent =
+        state.camera.facingMode === 'environment' ? '鏡頭：後置' : '鏡頭：前置';
+      if (state.camera.active) {
+        startCameraStream();
+      }
+    });
+    document.getElementById('btnRecordVideo').addEventListener('click', () => {
+      if (state.camera.isRecording) stopRecording();
+      else startRecording();
+    });
+    document.getElementById('btnDownloadRecording').addEventListener('click', () => {
+      if (!state.camera.recordedBlob) return;
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(state.camera.recordedBlob);
+      a.download = `running_gait_${Date.now()}.webm`;
+      a.click();
+    });
+    document.getElementById('btnAnalyzeRecording').addEventListener('click', () => {
+      if (!state.camera.recordedBlob) return;
+      const file = new File([state.camera.recordedBlob], 'recorded_run.webm', { type: state.camera.recordedBlob.type || 'video/webm' });
+      setMode('upload');
+      handleFileSelect(file);
+    });
+
+    // Play / Pause
+    document.getElementById('btnPlayPause').addEventListener('click', () => {
+      state.isPlaying = !state.isPlaying;
+      const label = document.getElementById('labelPlayPause');
+      const icon = document.getElementById('iconPlayPause');
+      if (state.isPlaying) {
+        label.textContent = '暫停';
+        icon.setAttribute('data-lucide', 'pause');
+        if (state.mode === 'upload' && state.mediaType === 'video') {
+          videoEl.play().catch(() => {});
+        } else if (state.mode === 'dual') {
+          if (state.dual.hasA) document.getElementById('dualVideoA').play().catch(() => {});
+          if (state.dual.hasB) document.getElementById('dualVideoB').play().catch(() => {});
+        }
+      } else {
+        label.textContent = '播放';
+        icon.setAttribute('data-lucide', 'play');
+        if (state.mode === 'upload' && state.mediaType === 'video') {
+          videoEl.pause();
+        } else if (state.mode === 'dual') {
+          document.getElementById('dualVideoA').pause();
+          document.getElementById('dualVideoB').pause();
+        }
+      }
+      if (window.lucide) window.lucide.createIcons();
+    });
+
+    // Step Back / Forward
+    document.getElementById('btnStepBack').addEventListener('click', () => {
+      state.isPlaying = false;
+      document.getElementById('labelPlayPause').textContent = '播放';
+      if (state.mode === 'sim') {
+        state.phase = (state.phase - 0.02 + 1) % 1;
+        timelineSlider.value = (state.phase * 100).toFixed(1);
+        timeLabel.textContent = `${Math.round(state.phase * 100)}%`;
+      } else if (state.mediaType === 'video') {
+        videoEl.pause();
+        videoEl.currentTime = Math.max(0, videoEl.currentTime - 1 / 30);
+      }
+    });
+
+    document.getElementById('btnStepFwd').addEventListener('click', () => {
+      state.isPlaying = false;
+      document.getElementById('labelPlayPause').textContent = '播放';
+      if (state.mode === 'sim') {
+        state.phase = (state.phase + 0.02) % 1;
+        timelineSlider.value = (state.phase * 100).toFixed(1);
+        timeLabel.textContent = `${Math.round(state.phase * 100)}%`;
+      } else if (state.mediaType === 'video') {
+        videoEl.pause();
+        videoEl.currentTime = Math.min(videoEl.duration || 0, videoEl.currentTime + 1 / 30);
+      }
+    });
+
+    document.getElementById('btnReset').addEventListener('click', () => {
+      state.phase = 0;
+      if (state.mediaType === 'video') videoEl.currentTime = 0;
+      state.history = [];
+      state.ankleTrailRight = []; state.ankleTrailLeft = [];
+      state.ankleTrailRight = []; state.ankleTrailLeft = [];
+    });
+
+    // Speed buttons
+    document.querySelectorAll('.speed-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        state.speed = parseFloat(btn.dataset.speed);
+        if (videoEl) videoEl.playbackRate = state.speed;
+        document.querySelectorAll('.speed-btn').forEach(b => {
+          b.className = 'speed-btn px-2 py-0.5 text-[11px] font-medium rounded text-slate-600 hover:text-slate-900';
+        });
+        btn.className = 'speed-btn px-2 py-0.5 text-[11px] font-medium rounded bg-white text-slate-900 shadow-sm';
+      });
+    });
+
+    // Timeline Scrub
+    timelineSlider.addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      if (state.mode === 'sim') {
+        state.phase = val / 100;
+        timeLabel.textContent = `${Math.round(val)}%`;
+      } else if (state.mediaType === 'video' && videoEl.duration) {
+        videoEl.currentTime = (val / 100) * videoEl.duration;
+      } else if (state.mode === 'dual') {
+        const vA = document.getElementById('dualVideoA');
+        const vB = document.getElementById('dualVideoB');
+        if (vA.duration) vA.currentTime = (val / 100) * vA.duration;
+        if (vB.duration) vB.currentTime = (val / 100) * vB.duration;
+      }
+    });
+
+    // Checkboxes
+    document.getElementById('chkShowAngles').addEventListener('change', (e) => {
+      state.showAngles = e.target.checked;
+    });
+    document.getElementById('chkShowVertical').addEventListener('change', (e) => {
+      state.showVertical = e.target.checked;
+    });
+
+    // Simulator Presets & Sliders
+    const sliderLean = document.getElementById('sliderLean');
+    const sliderCadence = document.getElementById('sliderCadence');
+    const valLeanTarget = document.getElementById('valLeanTarget');
+    const valCadence = document.getElementById('valCadence');
+
+    sliderLean.addEventListener('input', (e) => {
+      state.leanTarget = parseInt(e.target.value, 10);
+      valLeanTarget.textContent = `${state.leanTarget}°`;
+    });
+    sliderCadence.addEventListener('input', (e) => {
+      state.cadence = parseInt(e.target.value, 10);
+      valCadence.textContent = `${state.cadence} spm`;
+    });
+
+    document.getElementById('presetSelect').addEventListener('change', (e) => {
+      const presets = {
+        balanced: { lean: 8, cadence: 176 },
+        overstride: { lean: 2, cadence: 158 },
+        excessiveLean: { lean: 18, cadence: 170 },
+        highCadence: { lean: 12, cadence: 194 }
+      };
+      const p = presets[e.target.value];
+      if (!p) return;
+      state.leanTarget = p.lean;
+      state.cadence = p.cadence;
+      sliderLean.value = p.lean;
+      sliderCadence.value = p.cadence;
+      valLeanTarget.textContent = `${p.lean}°`;
+      valCadence.textContent = `${p.cadence} spm`;
+    });
+
+    document.getElementById('sideSelect').addEventListener('change', (e) => {
+      state.selectedSide = e.target.value;
+    });
+    document.getElementById('inputHeightCm').addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      if (val >= 100 && val <= 240) state.heightCm = val;
+    });
+    document.getElementById('envSelect').addEventListener('change', (e) => {
+      state.envMode = e.target.value;
+      state.speedEst.smoothedMs = 0;
+    });
+
+    // Multi-select segment filter buttons
+    function syncSegmentButtonsUI() {
+      document.querySelectorAll('.seg-btn').forEach(btn => {
+        const key = btn.dataset.seg;
+        const active = state.visibleSegments[key];
+        const check = btn.querySelector('.seg-check');
+        if (active) {
+          btn.className = 'seg-btn flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 border border-slate-400 text-slate-900 font-medium transition';
+          if (check) check.textContent = '✓';
+        } else {
+          btn.className = 'seg-btn flex items-center justify-between gap-1.5 px-2.5 py-1.5 rounded-lg bg-white border border-slate-200 text-slate-400 opacity-60 transition';
+          if (check) check.textContent = '';
+        }
+      });
+    }
+    document.querySelectorAll('.seg-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.seg;
+        state.visibleSegments[key] = !state.visibleSegments[key];
+        syncSegmentButtonsUI();
+      });
+    });
+    document.getElementById('btnSegAll').addEventListener('click', () => {
+      Object.keys(state.visibleSegments).forEach(k => (state.visibleSegments[k] = true));
+      syncSegmentButtonsUI();
+    });
+    document.getElementById('btnSegNone').addEventListener('click', () => {
+      Object.keys(state.visibleSegments).forEach(k => (state.visibleSegments[k] = false));
+      syncSegmentButtonsUI();
+    });
+
+    const btnSideRight = document.getElementById('btnSideRight');
+    const btnSideLeft = document.getElementById('btnSideLeft');
+    btnSideRight.addEventListener('click', () => {
+      state.showRightSide = !state.showRightSide;
+      btnSideRight.textContent = state.showRightSide ? '右側 (實線) ✓' : '右側 (實線)';
+      btnSideRight.className = state.showRightSide
+        ? 'px-2 py-1 text-[11px] font-medium rounded border border-slate-400 bg-slate-100 text-slate-900 transition'
+        : 'px-2 py-1 text-[11px] font-medium rounded border border-slate-200 bg-white text-slate-400 transition';
+    });
+    btnSideLeft.addEventListener('click', () => {
+      state.showLeftSide = !state.showLeftSide;
+      btnSideLeft.textContent = state.showLeftSide ? '左側 (虛線) ✓' : '左側 (虛線)';
+      btnSideLeft.className = state.showLeftSide
+        ? 'px-2 py-1 text-[11px] font-medium rounded border border-slate-400 bg-slate-100 text-slate-900 transition'
+        : 'px-2 py-1 text-[11px] font-medium rounded border border-slate-200 bg-white text-slate-400 transition';
+    });
+
+    document.getElementById('btnClearChart').addEventListener('click', () => {
+      state.history = [];
+      angleChart.data.labels = [];
+      angleChart.data.datasets.forEach(ds => (ds.data = []));
+      angleChart.update();
+    });
+
+    // File Upload Handling
+    async function handleFileSelect(file) {
+      if (!file) return;
+      await initMediaPipe();
+      const url = URL.createObjectURL(file);
+      uploadPromptOverlay.classList.add('hidden');
+      document.getElementById('btnChangeMedia').classList.remove('hidden');
+      state.history = [];
+
+      if (file.type.startsWith('video/')) {
+        state.mediaType = 'video';
+        state.staticImageLandmarks = null;
+        state.lastVideoTime = -1;
+        state.lastVideoLandmarks = null;
+        state.needsVideoDetect = true;
+        state.gct = { inContact: false, contactStartTime: null, lastMs: null, samples: [], maxAnkleY: 0, minAnkleY: 99999 };
+        state.speedEst = { prevTime: null, prevHipX: null, prevAnkleX: null, smoothedMs: 0 };
+        videoEl.src = url;
+        videoEl.playbackRate = state.speed;
+        videoEl.onloadeddata = () => {
+          state.isPlaying = true;
+          videoEl.play().catch(() => {});
+          showToast('已載入跑步影片，開始偵測骨骼與關節角度');
+        };
+      } else if (file.type.startsWith('image/')) {
+        state.mediaType = 'image';
+        videoEl.pause();
+        imgEl.src = url;
+        imgEl.onload = async () => {
+          if (state.poseReady && state.poseLandmarker) {
+            try {
+              await state.poseLandmarker.setOptions({ runningMode: 'IMAGE' });
+              const res = state.poseLandmarker.detect(imgEl);
+              if (res.landmarks && res.landmarks.length > 0) {
+                state.staticImageLandmarks = res.landmarks[0];
+                showToast('圖片骨骼標記完成');
+              } else {
+                showToast('圖片中未偵測到完整人體姿勢');
+              }
+              await state.poseLandmarker.setOptions({ runningMode: 'VIDEO' });
+            } catch (err) {
+              showToast('圖片分析失敗');
+            }
+          }
+        };
+      }
+    }
+
+    document.getElementById('fileInput').addEventListener('change', (e) => handleFileSelect(e.target.files[0]));
+    document.getElementById('fileInputSecondary').addEventListener('change', (e) => handleFileSelect(e.target.files[0]));
+
+    // Right Panel Tab Switcher (基礎角度 vs 進階數據)
+    const tabBasic = document.getElementById('tabBasicMetrics');
+    const tabAdv = document.getElementById('tabAdvancedMetrics');
+    const panelBasic = document.getElementById('panelBasicMetrics');
+    const panelAdv = document.getElementById('panelAdvancedMetrics');
+    tabBasic.addEventListener('click', () => {
+      tabBasic.className = 'px-2.5 py-1 text-xs font-semibold rounded-md bg-white text-slate-900 shadow-sm transition';
+      tabAdv.className = 'px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 transition';
+      panelBasic.classList.remove('hidden');
+      panelAdv.classList.add('hidden');
+    });
+    tabAdv.addEventListener('click', () => {
+      tabAdv.className = 'px-2.5 py-1 text-xs font-semibold rounded-md bg-white text-slate-900 shadow-sm transition';
+      tabBasic.className = 'px-2.5 py-1 text-xs font-medium rounded-md text-slate-600 hover:text-slate-900 transition';
+      panelAdv.classList.remove('hidden');
+      panelBasic.classList.add('hidden');
+    });
+
+    // Reset Key Phase Snapshots
+    document.getElementById('btnResetSnapshots').addEventListener('click', () => {
+      state.adv.snapshots = { IC: false, MS: false, TO: false };
+      state.adv.snapshotTimes = { IC: null, MS: null, TO: null };
+      ['IC', 'MS', 'TO'].forEach(k => {
+        document.getElementById(`snapImg${k}`).classList.add('hidden');
+        document.getElementById(`snapPlaceholder${k}`).classList.remove('hidden');
+        document.getElementById(`snapMeta${k}`).textContent = '--';
+      });
+      showToast('已清除定格快照，將自動重新擷取下一輪步態');
+    });
+
+    // Pre / Post Comparison
+    function captureCurrentSnapshotMetrics() {
+      const latest = state.history[state.history.length - 1];
+      return {
+        trunk: latest ? latest.trunk : 0,
+        gct: latest && latest.kinetics && latest.kinetics.gctMs ? latest.kinetics.gctMs : 0,
+        vertOsc: state.adv.vertOscCm,
+        overstride: state.adv.overstrideCm,
+        speedKmh: latest && latest.kinetics ? latest.kinetics.speedMs * 3.6 : 0
+      };
+    }
+
+    function renderPrePostTable() {
+      const wrap = document.getElementById('prePostTableWrap');
+      const pre = state.adv.preRecord;
+      const post = state.adv.postRecord;
+      if (!pre && !post) return;
+      const fmt = (v, unit) => (v !== undefined && v !== null ? `${v.toFixed(1)}${unit}` : '--');
+      const diff = (a, b, unit) => {
+        if (!pre || !post) return '--';
+        const d = b - a;
+        const sign = d > 0 ? '+' : '';
+        return `${sign}${d.toFixed(1)}${unit}`;
+      };
+      wrap.innerHTML = `
+        <table class="w-full text-[11px] text-left mono-num">
+          <thead>
+            <tr class="border-b border-slate-200 text-slate-500 font-sans">
+              <th class="py-1 font-medium">指標</th>
+              <th class="py-1 text-right font-medium">前測</th>
+              <th class="py-1 text-right font-medium">後測</th>
+              <th class="py-1 text-right font-medium">變化 (Δ)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-200/60 text-slate-800">
+            <tr><td class="py-1 font-sans">軀幹前傾</td><td class="text-right">${pre ? fmt(pre.trunk, '°') : '--'}</td><td class="text-right">${post ? fmt(post.trunk, '°') : '--'}</td><td class="text-right font-semibold">${diff(pre?.trunk, post?.trunk, '°')}</td></tr>
+            <tr><td class="py-1 font-sans">觸地時間</td><td class="text-right">${pre ? fmt(pre.gct, 'ms') : '--'}</td><td class="text-right">${post ? fmt(post.gct, 'ms') : '--'}</td><td class="text-right font-semibold">${diff(pre?.gct, post?.gct, 'ms')}</td></tr>
+            <tr><td class="py-1 font-sans">垂直振幅</td><td class="text-right">${pre ? fmt(pre.vertOsc, 'cm') : '--'}</td><td class="text-right">${post ? fmt(post.vertOsc, 'cm') : '--'}</td><td class="text-right font-semibold">${diff(pre?.vertOsc, post?.vertOsc, 'cm')}</td></tr>
+            <tr><td class="py-1 font-sans">過跨距離</td><td class="text-right">${pre ? fmt(pre.overstride, 'cm') : '--'}</td><td class="text-right">${post ? fmt(post.overstride, 'cm') : '--'}</td><td class="text-right font-semibold">${diff(pre?.overstride, post?.overstride, 'cm')}</td></tr>
+            <tr><td class="py-1 font-sans">預估跑速</td><td class="text-right">${pre ? fmt(pre.speedKmh, '') : '--'}</td><td class="text-right">${post ? fmt(post.speedKmh, '') : '--'}</td><td class="text-right font-semibold">${diff(pre?.speedKmh, post?.speedKmh, '')}</td></tr>
+          </tbody>
+        </table>
+      `;
+    }
+
+    document.getElementById('btnSavePre').addEventListener('click', () => {
+      state.adv.preRecord = captureCurrentSnapshotMetrics();
+      renderPrePostTable();
+      showToast('已儲存為「前測基準」');
+    });
+    document.getElementById('btnSavePost').addEventListener('click', () => {
+      state.adv.postRecord = captureCurrentSnapshotMetrics();
+      renderPrePostTable();
+      showToast('已儲存為「後測數據」並計算差異');
+    });
+
+    // Export CSV
+    document.getElementById('btnExportCsv').addEventListener('click', () => {
+      if (state.history.length === 0) {
+        showToast('目前尚無角度紀錄可匯出');
+        return;
+      }
+      const header = 'Frame,Trunk_Lean_Deg,Hip_Angle_Deg,Knee_Flexion_Deg,Elbow_Angle_Deg,Ankle_Shank_Deg,GCT_ms,Speed_kmh,Overstride_cm,Vert_Osc_cm\n';
+      const rows = state.history.map((r, i) => {
+        const gct = r.kinetics && r.kinetics.gctMs ? r.kinetics.gctMs.toFixed(1) : '';
+        const spd = r.kinetics && r.kinetics.speedMs ? (r.kinetics.speedMs * 3.6).toFixed(2) : '';
+        return `${i + 1},${r.trunk.toFixed(2)},${r.hip.toFixed(2)},${r.knee.toFixed(2)},${r.elbow.toFixed(2)},${r.ankle.toFixed(2)},${gct},${spd},${state.adv.overstrideCm.toFixed(2)},${state.adv.vertOscCm.toFixed(2)}`;
+      }).join('\n');
+      const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'running_gait_angles.csv';
+      a.click();
+      showToast('已匯出關節角度 CSV 報表');
+    });
+
+    // Re-detect once when user finishes seeking/stepping on a paused video
+    videoEl.addEventListener('seeked', () => {
+      state.smoothedLandmarks = null;
+      state.smoothedWorldLandmarks = null;
+      state.needsVideoDetect = true;
+    });
+
+    // Smoothing selector
+    document.getElementById('smoothSelect').addEventListener('change', (e) => {
+      state.smoothingLevel = e.target.value;
+      state.smoothedLandmarks = null;
+      state.smoothedWorldLandmarks = null;
+      showToast(`座標平滑濾波已設為：${e.target.options[e.target.selectedIndex].text}`);
+    });
+
+    // Click-to-Jump on Key Phase Snapshots (IC, MS, TO)
+    function jumpToSnapshot(key) {
+      const target = state.adv.snapshotTimes[key];
+      if (!target) {
+        showToast('此快照尚未擷取或無法跳轉');
+        return;
+      }
+      state.isPlaying = false;
+      document.getElementById('labelPlayPause').textContent = '播放';
+      const icon = document.getElementById('iconPlayPause');
+      if (icon) icon.setAttribute('data-lucide', 'play');
+      if (window.lucide) window.lucide.createIcons();
+
+      if (target.mode === 'sim' && state.mode === 'sim') {
+        state.phase = target.phase;
+        timelineSlider.value = (state.phase * 100).toFixed(1);
+        timeLabel.textContent = `${Math.round(state.phase * 100)}%`;
+        showToast(`已跳轉並定格至 ${key} 瞬間`);
+      } else if (target.mode === 'video' && state.mode === 'upload' && state.mediaType === 'video') {
+        videoEl.pause();
+        state.smoothedLandmarks = null;
+        state.smoothedWorldLandmarks = null;
+        videoEl.currentTime = target.time;
+        state.needsVideoDetect = true;
+        showToast(`已跳轉至 ${key} (${target.time.toFixed(2)}s)`);
+      }
+    }
+    document.getElementById('snapCardIC').addEventListener('click', () => jumpToSnapshot('IC'));
+    document.getElementById('snapCardMS').addEventListener('click', () => jumpToSnapshot('MS'));
+    document.getElementById('snapCardTO').addEventListener('click', () => jumpToSnapshot('TO'));
+
+    // View Angle Selector (側面 / 背面 / 斜角 3D)
+    document.getElementById('viewAngleSelect').addEventListener('change', (e) => {
+      state.viewAngle = e.target.value;
+      state.ankleTrailRight = [];
+      state.ankleTrailLeft = [];
+      const hint = document.getElementById('frontalHintText');
+      if (state.viewAngle === 'frontal') {
+        hint.textContent = '目前為額狀面視角：可即時監測骨盆下墜、動態膝內扣與步寬';
+        showToast('已切換至額狀面（背面/正面）評估視角');
+      } else if (state.viewAngle === 'oblique3d') {
+        hint.textContent = '目前為斜角 45° 3D 空間校正：以真實 3D 向量計算關節角度，減少透視誤差';
+        showToast('已啟用斜角 3D 空間關節校正');
+      } else {
+        hint.textContent = '切換上方「背面/正面」或「斜角 3D」可即時偵測骨盆下墜與動態膝外翻';
+      }
+    });
+
+    // Cadence Metronome (Web Audio API)
+    function playMetronomeClick() {
+      try {
+        if (!state.metronome.audioCtx) {
+          const AudioCtx = window.AudioContext || window.webkitAudioContext;
+          state.metronome.audioCtx = new AudioCtx();
+        }
+        const ctxA = state.metronome.audioCtx;
+        if (ctxA.state === 'suspended') ctxA.resume();
+        const osc = ctxA.createOscillator();
+        const gain = ctxA.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctxA.currentTime);
+        gain.gain.setValueAtTime(0.18, ctxA.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctxA.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(ctxA.destination);
+        osc.start();
+        osc.stop(ctxA.currentTime + 0.05);
+      } catch (_) {}
+    }
+
+    function restartMetronomeTimer() {
+      if (state.metronome.timerId) {
+        clearInterval(state.metronome.timerId);
+        state.metronome.timerId = null;
+      }
+      if (!state.metronome.enabled) return;
+      const intervalMs = Math.max(250, Math.round(60000 / state.cadence));
+      playMetronomeClick();
+      state.metronome.timerId = setInterval(playMetronomeClick, intervalMs);
+    }
+
+    document.getElementById('btnMetronome').addEventListener('click', () => {
+      state.metronome.enabled = !state.metronome.enabled;
+      const btn = document.getElementById('btnMetronome');
+      const lbl = document.getElementById('labelMetronome');
+      if (state.metronome.enabled) {
+        lbl.textContent = `節拍器：${state.cadence}`;
+        btn.className = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-white bg-slate-900 border border-slate-900 rounded-lg transition';
+        restartMetronomeTimer();
+        showToast(`已開啟步頻節拍器 (${state.cadence} spm)`);
+      } else {
+        lbl.textContent = '節拍器：關';
+        btn.className = 'inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 transition';
+        restartMetronomeTimer();
+      }
+    });
+
+    sliderCadence.addEventListener('input', () => {
+      if (state.metronome.enabled) {
+        document.getElementById('labelMetronome').textContent = `節拍器：${state.cadence}`;
+        restartMetronomeTimer();
+      }
+    });
+
+    // Athlete Assessment Report Modal
+    function buildReportSummary() {
+      const latest = state.history[state.history.length - 1];
+      const trunk = latest ? latest.trunk.toFixed(1) : '--';
+      const gct = latest && latest.kinetics && latest.kinetics.gctMs ? Math.round(latest.kinetics.gctMs) : '--';
+      const spd = latest && latest.kinetics ? (latest.kinetics.speedMs * 3.6).toFixed(1) : '--';
+      const symMax = Math.max(state.adv.symmetry.gctPct, state.adv.symmetry.kneePct, state.adv.symmetry.armPct);
+
+      const findings = [];
+      if (latest && latest.trunk > 13) findings.push('• 軀幹前傾偏大 (>13°)：建議強化核心抗屈曲能力，避免過度消耗能量 (Carson et al., 2024)。');
+      else if (latest && latest.trunk < 4) findings.push('• 軀幹前傾偏小 (<4°)：可練習從踝關節微幅前傾以提升推進效率。');
+      else findings.push('• 軀幹前傾處於效率區間 (4°–13°)。');
+
+      if (state.adv.overstrideCm > 15) findings.push('• 觸地過跨偏大 (>15 cm)：建議以節拍器微調步頻 +5%~10%，減少煞車衝擊 (Baker et al., 2024; Figueiredo et al., 2025)。');
+      else findings.push('• 觸地過跨距離控制良好，煞車負荷低。');
+
+      if (symMax > 10) findings.push(`• 雙側不對稱達 ${symMax.toFixed(1)}% (>10%)：建議進行單側肌力與動作控制評估 (Vincent et al., 2025)。`);
+      else findings.push(`• 雙側對稱性良好（最大差異 ${symMax.toFixed(1)}%）。`);
+
+      if (state.adv.pelvicDropDeg > 5 || state.adv.kneeValgusDeg > 10) {
+        findings.push('• 額狀面力線警示：偵測到骨盆下墜或動態膝內扣偏高，建議加強臀中肌穩定訓練。');
+      }
+
+      return {
+        html: `
+          <div class="grid grid-cols-2 gap-2 bg-slate-50 p-3 rounded-xl border border-slate-200">
+            <div><span class="text-slate-500">評估視角：</span><strong>${state.viewAngle}</strong></div>
+            <div><span class="text-slate-500">軀幹前傾：</span><strong class="mono-num">${trunk}°</strong></div>
+            <div><span class="text-slate-500">觸地時間：</span><strong class="mono-num">${gct} ms</strong></div>
+            <div><span class="text-slate-500">預估跑速：</span><strong class="mono-num">${spd} km/h</strong></div>
+            <div><span class="text-slate-500">過跨距離：</span><strong class="mono-num">${state.adv.overstrideCm.toFixed(1)} cm</strong></div>
+            <div><span class="text-slate-500">垂直振幅：</span><strong class="mono-num">${state.adv.vertOscCm.toFixed(1)} cm</strong></div>
+            <div><span class="text-slate-500">骨盆傾角：</span><strong class="mono-num">${state.adv.pelvicDropDeg.toFixed(1)}°</strong></div>
+            <div><span class="text-slate-500">動態膝內扣：</span><strong class="mono-num">${state.adv.kneeValgusDeg.toFixed(1)}°</strong></div>
+          </div>
+          <div>
+            <h4 class="font-semibold text-slate-900 mb-1.5">客觀評估結論與訓練建議</h4>
+            <div class="space-y-1 text-slate-700 leading-relaxed">${findings.map(f => `<div>${f}</div>`).join('')}</div>
+          </div>
+        `,
+        plainText: `【選手跑步生物力學評估摘要】\n視角: ${state.viewAngle} | 軀幹前傾: ${trunk}° | 觸地時間: ${gct} ms | 跑速: ${spd} km/h\n過跨距離: ${state.adv.overstrideCm.toFixed(1)} cm | 垂直振幅: ${state.adv.vertOscCm.toFixed(1)} cm | 骨盆傾角: ${state.adv.pelvicDropDeg.toFixed(1)}° | 動態膝內扣: ${state.adv.kneeValgusDeg.toFixed(1)}°\n\n評估建議：\n${findings.join('\n')}`
+      };
+    }
+
+    const reportModal = document.getElementById('reportModal');
+    document.getElementById('btnOpenReport').addEventListener('click', () => {
+      const rep = buildReportSummary();
+      document.getElementById('reportBody').innerHTML = rep.html;
+      reportModal.classList.remove('hidden');
+    });
+    document.getElementById('btnCloseReport').addEventListener('click', () => {
+      reportModal.classList.add('hidden');
+    });
+    document.getElementById('btnCopyReport').addEventListener('click', () => {
+      const rep = buildReportSummary();
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(rep.plainText).then(() => showToast('已複製評估摘要文字'));
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = rep.plainText;
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+        showToast('已複製評估摘要文字');
+      }
+    });
+    document.getElementById('btnPrintReport').addEventListener('click', () => {
+      window.print();
+    });
+
+    // Mobile Help Modal Listeners
+    const mobileModal = document.getElementById('mobileModal');
+    document.getElementById('btnMobileHelp').addEventListener('click', () => {
+      mobileModal.classList.remove('hidden');
+    });
+    document.getElementById('btnCloseMobile').addEventListener('click', () => {
+      mobileModal.classList.add('hidden');
+    });
+    document.getElementById('btnConfirmMobile').addEventListener('click', () => {
+      mobileModal.classList.add('hidden');
+    });
+
+    // --- Biofeedback Alert ---
+    document.getElementById('chkBiofeedback').addEventListener('change', (e) => {
+      state.biofeedback = e.target.checked;
+      if (!state.biofeedback) document.getElementById('biofeedbackPill').classList.add('hidden');
+    });
+
+    function updateBiofeedbackAlert() {
+      const pill = document.getElementById('biofeedbackPill');
+      const txt = document.getElementById('biofeedbackText');
+      if (!state.biofeedback || state.mode === 'dual') {
+        pill.classList.add('hidden');
+        return;
+      }
+      const alerts = [];
+      if (state.adv.overstrideCm > 15) alerts.push(`過跨偏大 (${state.adv.overstrideCm.toFixed(1)}cm)`);
+      if (state.adv.pelvicDropDeg > 5) alerts.push(`骨盆下墜 (${state.adv.pelvicDropDeg.toFixed(1)}°)`);
+      if (state.adv.kneeValgusDeg > 10) alerts.push(`膝內扣 (${state.adv.kneeValgusDeg.toFixed(1)}°)`);
+      if (alerts.length > 0) {
+        txt.textContent = alerts.join(' ｜ ');
+        pill.classList.remove('hidden');
+      } else {
+        pill.classList.add('hidden');
+      }
+    }
+
+    // --- Manual Protractor (Click/Tap 3 points on canvas) ---
+    function drawProtractorOverlays() {
+      const drawPt = (p) => {
+        ctx.fillStyle = '#facc15';
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      };
+      ctx.save();
+      state.protractor.shapes.forEach(sh => {
+        ctx.strokeStyle = '#facc15';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(sh.a.x, sh.a.y);
+        ctx.lineTo(sh.b.x, sh.b.y);
+        ctx.lineTo(sh.c.x, sh.c.y);
+        ctx.stroke();
+        drawPt(sh.a); drawPt(sh.b); drawPt(sh.c);
+        ctx.font = '700 12px Inter, sans-serif';
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+        ctx.fillRect(sh.b.x + 8, sh.b.y - 18, 48, 18);
+        ctx.fillStyle = '#facc15';
+        ctx.fillText(`${sh.angle.toFixed(1)}°`, sh.b.x + 12, sh.b.y - 5);
+      });
+      state.protractor.points.forEach((p, idx) => {
+        drawPt(p);
+        if (idx > 0) {
+          ctx.strokeStyle = '#facc15';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(state.protractor.points[idx - 1].x, state.protractor.points[idx - 1].y);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+        }
+      });
+      ctx.restore();
+    }
+
+    document.getElementById('btnProtractor').addEventListener('click', () => {
+      state.protractor.active = !state.protractor.active;
+      state.protractor.points = [];
+      const btn = document.getElementById('btnProtractor');
+      if (state.protractor.active) {
+        btn.className = 'inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-amber-500 bg-amber-100 text-amber-900 text-xs font-semibold transition';
+        canvas.style.cursor = 'crosshair';
+        showToast('已啟用量角器：請依序點擊畫面 3 個點（第 2 點為頂點）');
+      } else {
+        btn.className = 'inline-flex items-center gap-1 px-2 py-1.5 rounded-lg border border-slate-200 text-slate-700 text-xs font-medium hover:bg-slate-100 transition';
+        canvas.style.cursor = 'default';
+      }
+    });
+
+    document.getElementById('btnClearProtractor').addEventListener('click', () => {
+      state.protractor.points = [];
+      state.protractor.shapes = [];
+      document.getElementById('btnClearProtractor').classList.add('hidden');
+    });
+
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!state.protractor.active) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = ((e.clientX - rect.left) / rect.width) * canvas.width;
+      const y = ((e.clientY - rect.top) / rect.height) * canvas.height;
+      state.protractor.points.push({ x, y });
+      if (state.protractor.points.length === 3) {
+        const [a, b, c] = state.protractor.points;
+        const ang = angleBetween3Points(a, b, c);
+        state.protractor.shapes.push({ a, b, c, angle: ang });
+        state.protractor.points = [];
+        document.getElementById('btnClearProtractor').classList.remove('hidden');
+        showToast(`自訂量測角度：${ang.toFixed(1)}°`);
+      }
+    });
+
+    // --- Dual Video Comparison ---
+    function setupDualFileInput(inputId, videoId, key) {
+      document.getElementById(inputId).addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        await initMediaPipe();
+        const vid = document.getElementById(videoId);
+        vid.src = URL.createObjectURL(file);
+        vid.playbackRate = state.speed;
+        vid.onloadeddata = () => {
+          state.dual['has' + key] = true;
+          state.dual['lastTime' + key] = -1;
+          state.dual['landmarks' + key] = null;
+          if (state.isPlaying) vid.play().catch(() => {});
+          showToast(`已載入對比影片 ${key}`);
+        };
+      });
+    }
+    setupDualFileInput('fileDualA', 'dualVideoA', 'A');
+    setupDualFileInput('fileDualB', 'dualVideoB', 'B');
+
+    function renderDualVideoFrame(key, vid, cvs, metaEl) {
+      const rect = cvs.parentElement.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0 && (cvs.width !== Math.floor(rect.width) || cvs.height !== Math.floor(rect.height))) {
+        cvs.width = Math.floor(rect.width);
+        cvs.height = Math.floor(rect.height);
+      }
+      const c = cvs.getContext('2d');
+      c.fillStyle = '#0f172a';
+      c.fillRect(0, 0, cvs.width, cvs.height);
+      if (!state.dual['has' + key] || vid.readyState < 2) {
+        c.fillStyle = '#64748b';
+        c.font = '12px Inter, "Noto Sans TC", sans-serif';
+        c.textAlign = 'center';
+        c.fillText(`請載入影片 ${key}`, cvs.width / 2, cvs.height / 2);
+        return;
+      }
+      const vw = vid.videoWidth || 640, vh = vid.videoHeight || 360;
+      const sc = Math.min(cvs.width / vw, cvs.height / vh);
+      const dw = vw * sc, dh = vh * sc;
+      const ox = (cvs.width - dw) / 2, oy = (cvs.height - dh) / 2;
+      c.drawImage(vid, ox, oy, dw, dh);
+
+      const isNew = Math.abs(vid.currentTime - state.dual['lastTime' + key]) > 1e-4;
+      if (state.poseReady && state.poseLandmarker && isNew && !vid.seeking) {
+        try {
+          const res = state.poseLandmarker.detectForVideo(vid, performance.now());
+          if (res.landmarks && res.landmarks.length > 0) {
+            state.dual['landmarks' + key] = res.landmarks[0];
+            state.dual['lastTime' + key] = vid.currentTime;
+          }
+        } catch (_) {}
+      }
+      const lms = state.dual['landmarks' + key];
+      if (lms) {
+        const pose = extractMediaPipePose(lms, dw, dh, ox, oy);
+        const r = pose.right;
+        const drawSeg = (p1, p2, col) => {
+          c.strokeStyle = col; c.lineWidth = 3; c.lineCap = 'round';
+          c.beginPath(); c.moveTo(p1.x, p1.y); c.lineTo(p2.x, p2.y); c.stroke();
+        };
+        drawSeg(r.head, r.shoulder, SEGMENT_COLORS.headNeck);
+        drawSeg(r.shoulder, r.hip, SEGMENT_COLORS.torso);
+        drawSeg(r.shoulder, r.elbow, SEGMENT_COLORS.arm);
+        drawSeg(r.hip, r.knee, SEGMENT_COLORS.thigh);
+        drawSeg(r.knee, r.ankle, SEGMENT_COLORS.shin);
+        [r.head, r.shoulder, r.elbow, r.hip, r.knee, r.ankle].forEach(pt => {
+          c.fillStyle = '#fff'; c.strokeStyle = '#0f172a'; c.lineWidth = 1.2;
+          c.beginPath(); c.arc(pt.x, pt.y, 4, 0, Math.PI * 2); c.fill(); c.stroke();
+        });
+        const trunk = angleFromVertical(r.hip, r.shoulder, pose.facingDir);
+        const kneeF = Math.max(0, 180 - angleBetween3Points(r.hip, r.knee, r.ankle));
+        metaEl.textContent = `前傾 ${trunk.toFixed(1)}° | 膝屈曲 ${kneeF.toFixed(1)}°`;
+      }
+    }
+
+    // --- Athlete Profiles & Longitudinal Storage (localStorage) ---
+    const STORAGE_KEY = 'running_gait_lab_athletes_v1';
+    let historyChartInstance = null;
+
+    function loadAthletes() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            state.athletes = parsed;
+            state.activeAthleteId = parsed[0].id;
+            return;
+          }
+        }
+      } catch (_) {}
+      state.athletes = [{ id: 'default', name: '預設跑者', heightCm: 170, records: [] }];
+      state.activeAthleteId = 'default';
+    }
+
+    function saveAthletes() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(state.athletes));
+      } catch (_) {}
+    }
+
+    function getActiveAthlete() {
+      return state.athletes.find(a => a.id === state.activeAthleteId) || state.athletes[0];
+    }
+
+    function syncAthleteUI() {
+      const sel = document.getElementById('athleteSelect');
+      sel.innerHTML = state.athletes.map(a => `<option value="${a.id}">${a.name} (${a.heightCm} cm)</option>`).join('');
+      sel.value = state.activeAthleteId;
+      const cur = getActiveAthlete();
+      state.heightCm = cur.heightCm;
+      document.getElementById('inputHeightCm').value = cur.heightCm;
+      document.getElementById('labelActiveAthlete').textContent = cur.name;
+      document.getElementById('athleteCurrentLabel').textContent = `${cur.name} (${cur.heightCm} cm)`;
+
+      const tbody = document.getElementById('athleteHistoryBody');
+      if (!cur.records || cur.records.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="px-3 py-3 text-center text-slate-400 font-sans">尚無檢測紀錄，點擊「儲存本次檢測數據」即可建立追蹤檔案</td></tr>';
+      } else {
+        tbody.innerHTML = cur.records.slice().reverse().map(r => `
+          <tr>
+            <td class="px-2.5 py-1.5 font-sans text-slate-600">${r.date}</td>
+            <td class="px-2 py-1.5 text-right">${r.trunk.toFixed(1)}°</td>
+            <td class="px-2 py-1.5 text-right">${r.gct ? Math.round(r.gct) + 'ms' : '--'}</td>
+            <td class="px-2 py-1.5 text-right">${r.overstride.toFixed(1)}cm</td>
+            <td class="px-2 py-1.5 text-right">${r.symMax.toFixed(1)}%</td>
+            <td class="px-2 py-1.5 font-sans">${r.footStrike}</td>
+          </tr>
+        `).join('');
+      }
+
+      // Render Longitudinal Chart
+      const hCtx = document.getElementById('historyChart').getContext('2d');
+      if (historyChartInstance) historyChartInstance.destroy();
+      const recs = cur.records || [];
+      historyChartInstance = new Chart(hCtx, {
+        type: 'line',
+        data: {
+          labels: recs.map(r => r.date.slice(5, 16)),
+          datasets: [
+            { label: '軀幹前傾 (°)', data: recs.map(r => r.trunk), borderColor: '#d97706', borderWidth: 2, tension: 0.2 },
+            { label: '過跨距離 (cm)', data: recs.map(r => r.overstride), borderColor: '#2563eb', borderWidth: 2, tension: 0.2 }
+          ]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { labels: { boxWidth: 10, font: { size: 10 } } } },
+          scales: { x: { ticks: { font: { size: 9 } } }, y: { beginAtZero: true, ticks: { font: { size: 9 } } } }
+        }
+      });
+    }
+
+    loadAthletes();
+    syncAthleteUI();
+
+    const athleteModal = document.getElementById('athleteModal');
+    document.getElementById('btnAthleteModal').addEventListener('click', () => {
+      syncAthleteUI();
+      athleteModal.classList.remove('hidden');
+    });
+    document.getElementById('btnCloseAthlete').addEventListener('click', () => {
+      athleteModal.classList.add('hidden');
+    });
+    document.getElementById('athleteSelect').addEventListener('change', (e) => {
+      state.activeAthleteId = e.target.value;
+      syncAthleteUI();
+    });
+    document.getElementById('btnAddAthlete').addEventListener('click', () => {
+      const name = document.getElementById('inputNewAthleteName').value.trim();
+      const h = parseInt(document.getElementById('inputNewAthleteHeight').value, 10) || 170;
+      if (!name) {
+        showToast('請輸入選手姓名');
+        return;
+      }
+      const newAth = { id: 'ath_' + Date.now(), name, heightCm: Math.max(120, Math.min(220, h)), records: [] };
+      state.athletes.push(newAth);
+      state.activeAthleteId = newAth.id;
+      document.getElementById('inputNewAthleteName').value = '';
+      saveAthletes();
+      syncAthleteUI();
+      showToast(`已新增選手：${name}`);
+    });
+    document.getElementById('btnSaveHistoryRecord').addEventListener('click', () => {
+      const cur = getActiveAthlete();
+      const latest = state.history[state.history.length - 1];
+      const nowStr = new Date().toLocaleString('zh-TW', { hour12: false }).slice(0, 16);
+      const symMax = Math.max(state.adv.symmetry.gctPct, state.adv.symmetry.kneePct, state.adv.symmetry.armPct);
+      cur.records.push({
+        date: nowStr,
+        trunk: latest ? latest.trunk : state.leanTarget,
+        gct: latest && latest.kinetics && latest.kinetics.gctMs ? latest.kinetics.gctMs : 0,
+        overstride: state.adv.overstrideCm,
+        symMax,
+        footStrike: state.adv.footStrikeType.split(' ')[0]
+      });
+      saveAthletes();
+      syncAthleteUI();
+      showToast(`已儲存至 ${cur.name} 的檢測紀錄`);
+    });
+
+    // Start loop
+    requestAnimationFrame(loop);
+  </script>
+</body>
+</html>
